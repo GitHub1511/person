@@ -1652,6 +1652,22 @@ class SkillSystem:
             self.recovery_targets = {}
 
     # ---- recovery helpers (closed loop on the live body) -----------------
+    def _rec_situp(self):
+        """From supine: plant the feet, crunch up to sitting with the strong
+        hip flexors, then the normal kneel stages take over."""
+        yield from self._rec_hold(
+            {"knee_l": 1.90, "knee_r": 1.90,
+             "hip_l_flex": -0.90, "hip_r_flex": -0.90,
+             "sh_l_flex": 0.20, "sh_r_flex": 0.20},
+            2.5, lambda: True, "feet-plant", proceed=lambda: True)
+        yield from self._rec_hold(
+            {"spine_bend": 0.60, "chest_bend": 0.45,
+             "hip_l_flex": -1.30, "hip_r_flex": -1.30,
+             "knee_l": 1.90, "knee_r": 1.90,
+             "sh_l_flex": 1.30, "sh_r_flex": 1.30,
+             "elbow_l": -0.30, "elbow_r": -0.30},
+            5.0, lambda: self._rec_com() > 0.50, "crunch")
+
     def _rec_com(self) -> float:
         st = self.agent.state
         return float(st.com[2]) if st is not None else 0.0
