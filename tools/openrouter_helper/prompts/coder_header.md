@@ -10,11 +10,14 @@ Working rules:
 - Read a file before you edit it. Prefer small, exact edits to existing files and new files for new
   systems. Keep every change importable.
 - Respect `tools/openrouter_helper/prompts/rules.md` (memory/time budget, no new dependencies, complexity
-  knobs, off at `base`).
+  knobs, off at `base`). Only write inside the allow-list there (`embodied_human/`, `tools/` except
+  `tools/openrouter_helper/`, root `run_*.py` / `diag_*.py` / `README.md`). Never touch
+  `tools/openrouter_helper/`, `.git`, `.env`, `orchestrator/`, or `AI_LOG.txt`.
 - Before you finish run: `bash tools/openrouter_helper/helper.sh verify`  -- it compiles what you changed,
   imports the package at `base` and `rich`, runs a 20 s smoke simulation and prints PASS or FAIL with the
-  reason. If it fails, fix the cause and run it again. If you cannot fix it, run
-  `bash tools/openrouter_helper/helper.sh rollback` to return to the snapshot taken before you started.
+  reason. If it fails, fix the cause and run it again. If you cannot fix it, leave the tree as-is and say
+  so plainly in your report; the loop will roll the step back itself (do NOT run `rollback`, `snapshot`,
+  `run`, `stop`, or `serve` -- the guard blocks them).
 - Finish with a short report: what you changed, what the verification printed, what you measured.
 
 ---

@@ -433,6 +433,13 @@ class MotorSystem:
         """
         M = self.M
         out = np.zeros(self.n)
+        # No protective stepping while down: a swing leg from lying is not a
+        # rescue step, it is ~170 Nm of asymmetric flailing that fights any
+        # get-up skill. Steps only make sense from a standing-height body.
+        if bool(state.fallen) or float(state.com[2]) < 0.40:
+            self.step_state = "none"
+            self.step_timer = 0.0
+            return out
         support_x = 0.5 * abs(state.site_pos.get("soma_foot_l", np.zeros(3))[0]
                               - state.site_pos.get("soma_foot_r", np.zeros(3))[0]) + 0.038
         # capture point: where the COM would come to rest under the CoP limit
