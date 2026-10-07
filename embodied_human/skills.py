@@ -1797,15 +1797,49 @@ class SkillSystem:
                 yield
             else:
                 raise ActionFailed(f"stand_up: hands never got under (COM {sk._rec_com():.2f} m)")
-            # unroll to standing with the hands still planted
-            sk._rec_set({"knee_l": 0.10, "knee_r": 0.10,
-                         "hip_l_flex": 0.0, "hip_r_flex": 0.0,
-                         "spine_bend": 0.02, "chest_bend": 0.0,
-                         "ankle_l_flex": -0.05, "ankle_r_flex": -0.05})
+            # Unroll bottom-up with both hands still planted: hips first
+            # (pelvis over feet), then spine in two halves. Knees stay
+            # locked straight throughout — flexing them collapses the strut.
+            sk._rec_set({"hip_l_flex": 0.0, "hip_r_flex": 0.0})
             t1 = ag.t
-            while ag.t - t1 < 5.0:
-                if not ag.state.fallen and sk._rec_com() > 0.72:
+            while ag.t - t1 < 2.0:
+                yield
+            for sp, ch in ((0.25, 0.10), (0.02, 0.0)):
+                sk._rec_set({"spine_bend": sp, "chest_bend": ch,
+                             "ankle_l_flex": -0.05, "ankle_r_flex": -0.05})
+                t1 = ag.t
+                while ag.t - t1 < 2.0:
+                    if not ag.state.fallen and sk._rec_com() > 0.72:
+                        break
+                    yield
+            # Sequential release: left hand first once high and steady with
+            # the right still pinning; right hand only after the full
+            # standing gate. Both at once face-plants.
+            t1 = ag.t
+            released_l = released_r = False
+            plants = {s: sk._rec_hand_home(s).copy() for s in "lr"}
+            while ag.t - t1 < 6.0:
+                com = sk._rec_com()
+                chest_up = float(ag.data.xmat[
+                    ag.meta.body_ids["chest"]].reshape(3, 3)[2, 2])
+                bal = float(getattr(ag.motor, "balance_error", 1.0) or 1.0)
+                if not released_l and com > 0.68 and chest_up > 0.6:
+                    sk.arm["l"].begin_retract()
+                    released_l = True
+                if released_l and not released_r and not ag.state.fallen \
+                        and com > 0.72 and bal < 0.02:
+                    sk.arm["r"].begin_retract()
+                    released_r = True
+                if released_r and (not ag.state.fallen and com > 0.72 and bal < 0.02):
                     break
+                if bal > 0.06 and (released_l != released_r):
+                    # tipping with one hand off: re-plant the released hand
+                    s = "l" if released_l and not released_r else "r"
+                    sk._rec_servo_hand(s, plants[s])
+                    if s == "l":
+                        released_l = False
+                    else:
+                        released_r = False
                 yield
         finally:
             for s in "lr":
