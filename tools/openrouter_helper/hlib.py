@@ -204,12 +204,15 @@ def api_outline(per_module: int = 70, total: int = 24000) -> str:
 
         def sig(fn):
             a = [x.arg for x in fn.args.args if x.arg != "self"]
-            return f"{fn.name}({', '.join(a[:7])}{"..." if len(a) > 7 else ""})"
+            shown = ", ".join(a[:7])
+            ellipsis = "..." if len(a) > 7 else ""
+            return fn.name + "(" + shown + ellipsis + ")"
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
                 meths = [sig(n) for n in node.body if isinstance(n, ast.FunctionDef) and not n.name.startswith("_")]
                 attrs = [t.id for n in node.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)][:6]
-                lines.append(f"  class {node.name}: " + ", ".join(meths[:14]) + (f"  [attrs {", ".join(attrs)}]" if attrs else ""))
+                suffix = "  [attrs " + ", ".join(attrs) + "]" if attrs else ""
+                lines.append("  class " + node.name + ": " + ", ".join(meths[:14]) + suffix)
             elif isinstance(node, ast.FunctionDef) and not node.name.startswith("_"):
                 lines.append(f"  def {sig(node)}")
             elif isinstance(node, ast.Assign):
@@ -225,7 +228,21 @@ def history_text(n: int = 10) -> str:
     f = STATE / "history.jsonl"
     if not f.exists():
         return "(no steps taken yet)"
-    rows = [json.loads(l) for l in f.read_text().splitlines() if l.strip()][-n:]
+    rows = []
+    try:
+        lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return "(history unreadable)"
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            rows.append(json.loads(line))
+        except ValueError:
+            continue
+    rows = rows[-n:]
+    if not rows:
+        return "(no steps taken yet)"
     return "\n".join(f"- [{r.get('time', '')}] {r.get('title', '?')} -> **{r.get('result', '?')}**"
                      + (f": {r['note']}" if r.get("note") else "") for r in rows)
 

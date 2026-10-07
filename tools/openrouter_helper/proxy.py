@@ -268,11 +268,24 @@ def call_upstream(model: str, messages: list, max_tokens: int, extra: dict, iden
             "usage": usage, "x_reasoning_chars": sum(len(r) for r in reasoning)}
 
 
+def _model_missing(body_l: str) -> bool:
+    return any(w in body_l for w in ("no such model", "model not found", "invalid model",
+                                     "does not exist", "not a valid model", "unknown model"))
+
+
+def _is_max_tokens_complaint(body_l: str) -> bool:
+    return any(w in body_l for w in ("max_tokens", "max completes", "maximum context",
+                                     "context length", "too large", "token limit"))
+
+
 def handle_chat(body: dict, ident: dict | None = None) -> tuple[int, dict]:
-    harness = bool(ident)
+    # A harness claim needs BOTH headers (Referer + Title); a single header is not enough.
+    harness = bool(ident and ident.get("HTTP-Referer") and ident.get("X-Title"))
     messages = body.get("messages") or []
     if not messages:
         return 400, {"error": {"message": "no messages"}}
+    if not isinstance(messages, list) or len(messages) > 200:
+        return 400, {"error": {"message": "bad messages"}}
     with LOCK:                                    # one request at a time, in order
         attempts = 0
         while attempts < MAX_ATTEMPTS:
@@ -283,8 +296,14 @@ def handle_chat(body: dict, ident: dict | None = None) -> tuple[int, dict]:
             mid = m["id"]
             mt = U.max_tokens_for(m)
             asked = body.get("max_tokens") or body.get("max_completion_tokens")
-            if asked:
-                mt = min(mt, int(asked))
+            if asked is not None:
+                try:
+                    asked_i = int(asked)
+                except (ValueError, TypeError):
+                    return 400, {"error": {"message": "bad max_tokens"}}
+                if asked_i <= 0 or asked_i > 1000000:
+                    return 400, {"error": {"message": "bad max_tokens"}}
+                mt = min(mt, asked_i)
             U.wait_turn()
             t0 = time.time()
             U.count(mid)                          # every attempt counts, conservatively
@@ -293,7 +312,10 @@ def handle_chat(body: dict, ident: dict | None = None) -> tuple[int, dict]:
                 out = call_upstream(mid, messages, mt, body, ident)
                 U.d["consec_fail"][mid] = 0
                 U.save()
-                content = out["choices"][0]["message"]["content"] or ""
+                try:
+                    content = out["choices"][0]["message"].get("content") or ""
+                except (KeyError, IndexError, AttributeError, TypeError):
+                    content = ""
                 log_request({"t": time.time(), "model": mid, "status": 200, "s": round(time.time() - t0, 1),
                              "max_tokens": mt, "out_chars": len(content), "usage": out.get("usage", {}),
                              "n_today": U.d["counts"].get(mid, 0)})
@@ -305,9 +327,9 @@ def handle_chat(body: dict, ident: dict | None = None) -> tuple[int, dict]:
                 log_request({"t": time.time(), "model": mid, "status": e.status, "s": round(time.time() - t0, 1),
                              "max_tokens": mt, "err": (e.body or "")[:300]})
                 if e.status == 429:
-                    time.sleep(min(e.retry_after or 20.0, 120.0) * TIME_SCALE)
+                    time.sleep(min(e.retry_after if e.retry_after is not None else 20.0, 120.0) * TIME_SCALE)
                     continue
-                if e.status == 400 and any(w in body_l for w in ("max_tokens", "maximum", "context", "too large", "output")):
+                if e.status == 400 and _is_max_tokens_complaint(body_l):
                     if U.step_down(m):
                         continue
                 if e.status == 403 and "agentic harness" in body_l:
@@ -321,10 +343,20 @@ def handle_chat(body: dict, ident: dict | None = None) -> tuple[int, dict]:
                 if e.status in (401, 402, 403):
                     return e.status, {"error": {"message": f"upstream refused ({e.status}); check the key / credits",
                                                 "detail": (e.body or "")[:200]}}
-                if e.status == 404 or e.status == 400:
+                if e.status == 404 and _model_missing(body_l):
+                    U.d["skipped"][mid] = f"HTTP 404: {(e.body or '')[:120]}"
+                    U.save()
+                    continue
+                if e.status == 404 or (e.status == 400 and _model_missing(body_l)):
+                    # The model id itself is bad: skip it for the day. Any other 400 is
+                    # almost certainly the client's payload, so fail fast instead of
+                    # poisoning the model for everyone else.
                     U.d["skipped"][mid] = f"HTTP {e.status}: {(e.body or '')[:120]}"
                     U.save()
                     continue
+                if e.status == 400:
+                    return 400, {"error": {"message": "upstream rejected the request",
+                                           "detail": (e.body or "")[:200]}}
                 U.d["consec_fail"][mid] = U.d["consec_fail"].get(mid, 0) + 1
                 if U.d["consec_fail"][mid] >= 8:
                     U.d["skipped"][mid] = f"8 consecutive failures, last HTTP {e.status}"
@@ -366,14 +398,23 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.path.endswith("/chat/completions"):
             return self._send(404, {"error": "not found"})
-        n = int(self.headers.get("Content-Length", 0))
         try:
-            body = json.loads(self.rfile.read(n))
-        except ValueError:
+            n = int(self.headers.get("Content-Length", 0))
+        except (ValueError, TypeError):
+            return self._send(400, {"error": {"message": "bad Content-Length"}})
+        if n <= 0 or n > MAX_BODY:
+            return self._send(413 if n > MAX_BODY else 400,
+                              {"error": {"message": "body too large" if n > MAX_BODY else "empty body"}})
+        try:
+            raw = self.rfile.read(n)
+            body = json.loads(raw)
+        except (ValueError, OSError):
+            return self._send(400, {"error": {"message": "bad json"}})
+        if not isinstance(body, dict):
             return self._send(400, {"error": {"message": "bad json"}})
         ident = {k: self.headers[k] for k in ("HTTP-Referer", "X-Title") if self.headers.get(k)}
         code, obj = handle_chat(body, ident or None)
-        if body.get("stream") and code == 200:
+        if isinstance(body.get("stream"), bool) and body.get("stream") and code == 200:
             self._send_sse(obj)
         else:
             self._send(code, obj)
@@ -403,18 +444,23 @@ class H(BaseHTTPRequestHandler):
 
 
 def probe() -> int:
-    """Send "Reply with OK" to every model once (a few requests), without touching quotas' meaning."""
+    """Send "Reply with OK" to every model once. Probe traffic is rate-limited but
+    never burns the daily quota (it uses no U.count)."""
     rows = []
     for m in MODELS:
         t0 = time.time()
         U.wait_turn()
-        U.count(m["id"])
         try:
             out = call_upstream(m["id"], [{"role": "user", "content": "Reply with OK"}], 64, {})
-            txt = out["choices"][0]["message"]["content"].strip()[:40]
+            try:
+                txt = (out["choices"][0]["message"].get("content") or "").strip()[:40]
+            except (KeyError, IndexError, AttributeError, TypeError):
+                txt = ""
             rows.append((m["id"], "ok", f"{time.time() - t0:.1f}s", repr(txt)))
         except UpstreamError as e:
             rows.append((m["id"], f"HTTP {e.status}", f"{time.time() - t0:.1f}s", (e.body or "")[:100].replace("\n", " ")))
+        except Exception as e:
+            rows.append((m["id"], "ERR", f"{time.time() - t0:.1f}s", f"{type(e).__name__}: {e}"[:100]))
     for r in rows:
         print("  %-42s %-9s %-7s %s" % r)
     return 0 if all(r[1] == "ok" for r in rows) else 1
