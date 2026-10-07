@@ -642,6 +642,16 @@ class SkillSystem:
                         h = self.hands[s]
                         h.contact[key] = max(h.contact.get(key, 0.0), float(f[0]))
                         h.contact_obj = obj_gids[og]
+                elif hg in gid2digit:
+                    # hand against floor/furniture (not a graspable object):
+                    # load-bearing contact for push-up/climb anchors
+                    s, _key = gid2digit[hg]
+                    f = np.zeros(6)
+                    mujoco.mj_contactForce(m, d, i, f)
+                    if f[0] > 1.0:
+                        h = self.hands[s]
+                        h.contact["support"] = max(
+                            h.contact.get("support", 0.0), float(f[0]))
 
     # ------------------------------------------------------------------
     def _eq_id(self, side: str, obj: str) -> int:
