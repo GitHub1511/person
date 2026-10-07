@@ -56,7 +56,7 @@ def main() -> int:
     logf = open(sb / "run.log", "w")
     run = subprocess.Popen([BASH, h, "run"], env=env, stdout=logf, stderr=subprocess.STDOUT)
 
-    rng = random.Random(3)
+    SCHEDULE = ["good", "bad", "nothing", "bad_import", "good", "silent", "bad", "good", "nothing", "bad_import"]
     stop_flag = threading.Event()
     log_actions = []
 
@@ -67,15 +67,15 @@ def main() -> int:
             if nt.exists() and nt.stat().st_mtime_ns != seen:
                 seen = nt.stat().st_mtime_ns
                 time.sleep(0.5)
-                what = rng.choice(["good", "good", "bad", "nothing", "silent", "good", "bad_import"])
+                what = SCHEDULE[len(log_actions) % len(SCHEDULE)]
                 target = sb / "embodied_human" / "_fast.py"
                 if what == "good":
-                    target.write_text(target.read_text() + f"\n# harmless edit {time.time()}\n")
+                    target.write_text(target.read_text(encoding="utf-8-sig") + f"\n# harmless edit {time.time()}\n")
                 elif what == "bad":
-                    target.write_text(target.read_text() + "\ndef oops(:\n")
+                    target.write_text(target.read_text(encoding="utf-8-sig") + "\ndef oops(:\n")
                 elif what == "bad_import":
                     a = sb / "embodied_human" / "agent.py"
-                    a.write_text(a.read_text() + "\nraise RuntimeError('x')\n")
+                    a.write_text(a.read_text(encoding="utf-8-sig") + "\nraise RuntimeError('x')\n")
                 log_actions.append(what)
                 if what != "silent":
                     (state / "CODER_DONE").write_text("done")
@@ -108,9 +108,9 @@ def main() -> int:
     check(f"the loop completed {steps} steps", len(H) >= steps, str(len(H)))
     check("it accepted harmless steps", sum(h["result"] == "accepted" for h in H) >= 2)
     check("it rejected broken steps", sum(h["result"] == "rejected" for h in H) >= 2)
-    fast = (sb / "embodied_human" / "_fast.py").read_text()
+    fast = (sb / "embodied_human" / "_fast.py").read_text(encoding="utf-8-sig")
     check("a broken edit never survived (file compiles)", compile(fast, "_fast.py", "exec") is not None)
-    agent_src = (sb / "embodied_human" / "agent.py").read_text()
+    agent_src = (sb / "embodied_human" / "agent.py").read_text(encoding="utf-8-sig")
     check("a broken import never survived", "boom" not in agent_src and "raise RuntimeError('x')" not in agent_src)
     usage = json.loads((state / "usage.json").read_text())
     counts = usage["counts"]
