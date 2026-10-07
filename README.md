@@ -1,10 +1,10 @@
 # Embodied Human in MuJoCo
 
-A simulated person, not a policy. This is a humanoid model in MuJoCo with rich internal physiology: dense skin, populations of sensory cells, eyes that dry and blink, organ systems, a circadian clock, a neural mass, episodic memory, 28 emotions, 25 neuromodulators, 21 drives, a predictive‑coding brain that learns its own body schema, and a generative behaviour space of ~10^37 describable behaviours. It chooses actions by minimising expected free energy against setpoints supplied by its own body. There is no external task or reward; all motivations arise internally.
+A simulated person, not a policy. This is a humanoid model in MuJoCo with rich internal physiology: dense skin, populations of sensory cells, eyes that dry and blink, organ systems, a circadian clock, a neural mass, episodic memory, emotions, neuromodulators, drives, a predictive‑coding brain that learns its own body schema, and a generative behaviour space. It chooses actions by minimising expected free energy against setpoints supplied by its own body. There is no external task or reward; all motivations arise internally.
 
 ## Module Inventory
 
-**embodied_human/** (39 files, 18 716 lines total)
+**embodied_human/** (39 files, 18 751 lines total)
 - `__init__.py`: 3 lines – Embodied human: a simulated person, not a policy.
 - `_fast.py`: 16 lines – (unparseable: SyntaxError)
 - `active_inference.py`: 410 lines – Active inference: choosing what to do by minimising expected free energy.
@@ -35,7 +35,7 @@ A simulated person, not a policy. This is a humanoid model in MuJoCo with rich i
 - `record.py`: 294 lines – Episode recording.
 - `senses_ext.py`: 363 lines – Populations of sensory cells, not single channels.
 - `skeleton.py`: 465 lines – (unparseable: SyntaxError)
-- `skills.py`: 2599 lines – Motor skills: everything the body can *do* on purpose.
+- `skills.py`: 2634 lines – Motor skills: everything the body can *do* on purpose.
 - `skin.py`: 571 lines – Whole‑body artificial skin.
 - `speech.py`: 177 lines – Speech: the mouth, and the words above the head.
 - `state.py`: 113 lines – Shared state snapshot.
@@ -45,10 +45,12 @@ A simulated person, not a policy. This is a humanoid model in MuJoCo with rich i
 - `wbc.py`: 352 lines – Whole‑body inverse‑dynamics controller.
 - `world.py`: 183 lines – The world, as the body and the mind can query it.
 
-**tools/** (7 files)
+**tools/** (9 files)
 - `autopush.py`: 165 lines – Watch the project and push to GitHub whenever a file is saved.
 - `measure_identity.py`: 134 lines – First‑person ownership score for an instance transcript file.
 - `readme_check.py`: 88 lines – Check that an edited README section kept everything that is not wording.
+- `readme_describe.py`: 30 lines – Dump agent.describe() (and a few extra counts) for the current PERSON_COMPLEXITY to JSON.
+- `readme_runtime_facts.py`: 58 lines – Inventory of what the running person is made of (array sizes per subsystem), for the README.
 - `scale_complexity.py`: 187 lines – Set, inspect and measure how complicated the person is.
 - `simlock.py`: 119 lines – Run a heavy command only when the machine can afford it.
 - `train_body.py`: 302 lines – Learn, from many bodies at once, which behaviours are safe to perform.
@@ -57,11 +59,11 @@ A simulated person, not a policy. This is a humanoid model in MuJoCo with rich i
 **Root scripts**
 - `run_mind.py`
 - `run_sim.py`
-- 32 diagnostic scripts: `diag_app.py`, `diag_azr_balance.py`, `diag_azr_live.py`, `diag_balance.py`, `diag_balance2.py`, `diag_bubbles.py`, `diag_cobra.py`, `diag_fall.py`, `diag_getup.py`, `diag_getup_hands.py`, `diag_getup_shots.py`, `diag_handwalk.py`, `diag_hold.py`, `diag_long.py`, `diag_mind_server.py`, `diag_mind_smoke.py`, `diag_policy.py`, `diag_push2.py`, `diag_robust.py`, `diag_robust2.py`, `diag_skills.py`, `diag_slip.py`, `diag_stand2.py`, `diag_sweep.py`, `diag_table_climb.py`, `diag_walk.py`, `diag_walk_eval.py`, `diag_walk_render.py`, `diag_walk_sweep.py`, `diag_walk_turn.py`, `diag_wbc.py`
+- 32 diagnostic scripts: `diag_app.py`, `diag_azr_balance.py`, `diag_azr_live.py`, `diag_balance.py`, `diag_balance2.py`, `diag_bubbles.py`, `diag_cobra.py`, `diag_fall.py`, `diag_getup.py`, `diag_getup_hands.py`, `diag_getup_shots.py`, `diag_handwalk.py`, `diag_hold.py`, `diag_long.py`, `diag_lunge.py`, `diag_mind_server.py`, `diag_mind_smoke.py`, `diag_policy.py`, `diag_push2.py`, `diag_robust.py`, `diag_robust2.py`, `diag_skills.py`, `diag_slip.py`, `diag_stand2.py`, `diag_sweep.py`, `diag_table_climb.py`, `diag_walk.py`, `diag_walk_eval.py`, `diag_walk_render.py`, `diag_walk_sweep.py`, `diag_walk_turn.py`, `diag_wbc.py`
 
-**README.md** – present (5 316 bytes)
+**README.md** – present (5 414 bytes)
 
 ## How to Run
 
-1. Install the required Python packages (see `requirements.txt` or the project’s setup instructions).
+1. Install the required Python packages (see the project's setup instructions).
 2. Run a simulation with the base script:
