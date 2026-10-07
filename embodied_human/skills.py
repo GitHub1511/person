@@ -513,11 +513,17 @@ class SkillSystem:
                 pass
             try:
                 base = float(ag.receptors.cochlea.level.mean())
+                ad = np.asarray(ag.receptors.cochlea.adapt, float)
+                # Concurrent transient activity at utterance onset (forward
+                # masking estimate).  Frozen here deliberately: measuring it at
+                # delivery would count our own event's onset against itself.
+                m0 = max(0.0, float((np.asarray(
+                    ag.receptors.cochlea.level, float) - ad).mean()))
             except Exception:
-                base = 0.0
+                base, m0 = 0.0, 0.0
             self._pending_voice.append(dict(raw=text, utt=u, spk=spk, dist=dist,
                                             amp=amp, t_ready=ag.t + delay,
-                                            dur=u.duration, base=base))
+                                            dur=u.duration, base=base, m0=m0))
         except Exception:
             # Hearing must never break the sim: if anything above fails, the
             # utterance is simply not heard (silence is always valid data).
