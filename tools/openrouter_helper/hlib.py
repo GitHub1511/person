@@ -741,16 +741,50 @@ def _html_to_text(html: str) -> str:
 
 
 def fetch_web(urls: list[str], limit_chars: int = 9000) -> list[tuple[str, str]]:
-    """Fetch pages as plain text (max 1.5 MB each, 20 s).  Public hosts only; nothing is executed."""
+    """Fetch pages as plain text (max 1.5 MB each, 20 s).  Public hosts only; nothing is executed.
+    Redirects are NOT followed (the target was never allow-listed)."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
     web = STATE / "web"
     web.mkdir(exist_ok=True)
+    try:
+        opener = urllib.request.build_opener(_NoRedirect)
+    except Exception:
+        opener = None
     out = []
     for u in urls[:4]:
         try:
             if not _public_url(u):
                 out.append((u, "(refused: not a public http(s) address)")); continue
             req = urllib.request.Request(u, headers={"User-Agent": "person-sim-helper/1.0 (read-only)"})
-            with urllib.request.urlopen(req, timeout=20) as r:
+            try:
+                if opener is not None:
+                    r = opener.open(req, timeout=20)
+                else:
+                    r = urllib.request.urlopen(req, timeout=20)
+            except urllib.error.HTTPError as e:
+                if e.code in (301, 302, 303, 307, 308):
+                    out.append((u, "(refused: redirects are not followed)")); continue
+                raise
+            with r:
+                # Re-validate the final URL in case a proxy rewrote it.
+                try:
+                    final = r.geturl()
+                    if final != u and not _public_url(final):
+                        out.append((u, "(refused: redirect target is not public)")); continue
+                    # Double-check the peer IP is still public (DNS-rebinding window).
+                    host = urlparse(final).hostname or ""
+                    try:
+                        peer_ips = {sa[0] for _, _, _, _, sa in socket.getaddrinfo(host, None)}
+                        if any(ipaddress.ip_address(ip).is_private or ipaddress.ip_address(ip).is_loopback
+                               or ipaddress.ip_address(ip).is_link_local or ipaddress.ip_address(ip).is_reserved
+                               or ipaddress.ip_address(ip).is_multicast for ip in peer_ips):
+                            out.append((u, "(refused: resolves to a private address)")); continue
+                    except (OSError, ValueError):
+                        out.append((u, "(refused: DNS failed on re-check)")); continue
+                except Exception:
+                    pass
                 raw = r.read(1_500_000)
                 ctype = r.headers.get("Content-Type", "")
             if not any(k in ctype for k in ("text", "json", "xml")):
@@ -758,7 +792,10 @@ def fetch_web(urls: list[str], limit_chars: int = 9000) -> list[tuple[str, str]]
             text = raw.decode("utf-8", "replace")
             if "html" in ctype:
                 text = _html_to_text(text)
-            (web / (re.sub(r"[^A-Za-z0-9]+", "_", u)[:80] + ".txt")).write_text(text, encoding="utf-8")
+            try:
+                (web / (re.sub(r"[^A-Za-z0-9]+", "_", u)[:80] + ".txt")).write_text(text[:200000], encoding="utf-8")
+            except OSError:
+                pass
             out.append((u, text[:limit_chars]))
         except Exception as e:
             out.append((u, f"(fetch failed: {type(e).__name__}: {e})"))
