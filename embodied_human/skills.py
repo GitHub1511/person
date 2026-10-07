@@ -2251,6 +2251,56 @@ class SkillSystem:
         raise ActionFailed(f"stand_up: cobra made no progress "
                            f"(COM {tail_com:.2f} m, peak {peak:.2f} m)")
 
+    def _rec_crawl_to_table(self):
+        """Simple arm-pull crawl toward table: plant hands, pull body forward."""
+        ag = self.agent
+        sk = self
+        # Ensure hands are in crawling position (straight arms, forward)
+        for s in "lr":
+            h = sk.hands[s]
+            h.owned = True
+            h.target.update({"thumb": 0.8, "index": 0.8, "fingers": 0.8})
+            sk.arm[s].start(
+                lambda s=s: (sk._rec_hand_target_forward(s), None),
+                use_trunk=False, w_ori=0.0)
+        t0 = ag.t
+        while ag.t - t0 < 8.0:
+            # Check if reached table
+            if sk._rec_furniture_gap() <= 0.45:
+                return
+            # Plant hands firmly
+            for s in "lr":
+                sk._rec_servo_hand(s, sk._rec_hand_target_forward(s))
+            # Pull body forward by moving hands back toward body
+            for s in "lr":
+                cur = sk._rec_hand_home(s)
+                target = cur.copy()
+                target[1] -= 0.08  # pull back 8 cm
+                target[2] = max(target[2], 0.02)  # keep hands on ground
+                sk._rec_servo_hand(s, target)
+            # Hold the pull
+            t2 = ag.t
+            while ag.t - t2 < 0.8:
+                if sk._rec_furniture_gap() <= 0.45:
+                    return
+                yield
+            # Return hands forward for next pull
+            for s in "lr":
+                cur = sk._rec_hand_home(s)
+                target = cur.copy()
+                target[1] += 0.08  # reach forward 8 cm
+                target[2] = max(target[2], 0.02)
+                sk._rec_servo_hand(s, target)
+            t2 = ag.t
+            while ag.t - t2 < 0.5:
+                if sk._rec_furniture_gap() <= 0.45:
+                    return
+                yield
+            if sk._rec_furniture_gap() <= 0.45:
+                return
+        # Final safety: if still not at table, return anyway
+        return
+
     def _rec_com(self) -> float:
         st = self.agent.state
         return float(st.com[2]) if st is not None else 0.0
