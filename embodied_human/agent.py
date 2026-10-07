@@ -38,8 +38,10 @@ from .config import SimConfig
 from .drives import DRIVES, DriveFrame, DriveSystem, SETPOINTS
 from .interoception import (IDX, INTERO_NAMES, InteroInputs, InteroceptiveSystem,
                             N_INTEROCEPTION)
+from .behavior_exec import BehaviorExecutor
 from .intrinsic import IntrinsicMotivation, RewardFrame
 from .locomotion import Gait
+from .ocular import EyeRig, OcularInputs, OcularSurface
 from .skills import SkillSystem
 from .motor import MotorFrame, MotorSystem
 from .predictive import PredictionFrame, PredictiveSystem
@@ -358,6 +360,13 @@ class EmbodiedHuman:
         # does not move the body, so an external controller (the mind, a test
         # script) has the body to itself.
         self.autonomous = True
+        # ---- the eyes, and the open-ended behaviour repertoire -----------------
+        self.ocular = OcularSurface(self.cfg.seed)
+        self.eye_rig = EyeRig(model)
+        self.behavior = BehaviorExecutor(self, seed=self.cfg.seed)
+        self.ambient_humidity = 0.45     # relative humidity of the room (0..1)
+        self.ambient_airflow = 0.05      # m/s over the eyes with no walking
+        self._behavior_on = True
 
         # geom -> surface temperature, and geom -> scene-object name
         self.geom_temp = np.full(model.ngeom, 22.0, float)
@@ -388,7 +397,7 @@ class EmbodiedHuman:
         self.t = 0.0
         self.step_count = 0
         self.acc = {k: 0.0 for k in ("receptor", "afferent", "interoception",
-                                     "affect", "cognition", "mood")}
+                                     "affect", "cognition", "mood", "ocular")}
         self.frame: ReceptorFrame | None = None
         self.aff: AfferentFrame | None = None
         self.affect_frame: AffectFrame | None = None
