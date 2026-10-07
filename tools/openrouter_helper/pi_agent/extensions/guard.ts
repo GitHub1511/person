@@ -125,7 +125,7 @@ function segmentsWithCwd(command: string): { seg: string; cwd: string }[] {
 
 function hasRedirection(seg: string): boolean {
   // `>` / `>>` / `2>` / `N>&M`, but not `->` or `=>`.
-  return /(^|[0-9\s;|&])(>|>>)\s*\S/.test(seg) && !/[-=]>/.test(seg.replace(/(^|[0-9\s;|&])(>|>>)\s*\S/, "$1__REDIR__"));
+  return /(^|[\s;|&0-9])(>>?)\s*\S/.test(seg);
 }
 
 export default function (pi: ExtensionAPI) {
