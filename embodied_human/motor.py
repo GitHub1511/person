@@ -301,6 +301,13 @@ class MotorSystem:
                 -M.toe_strategy_gain * tau_ankle_y * self.strategy[2] * 0.5)
             balance[self.idx[f"knee_{side}"]] += (
                 0.20 * knee_cmd * self.strategy[3])
+        # Standing-height gate: below ~0.65 m COM there is no inverted
+        # pendulum to balance (lying/kneeling), and the saturated ankle/toe
+        # torques only steal budget from deliberate motion such as get-up
+        # skills. Exactly 1.0 at normal standing height, so standing is
+        # bit-for-bit unaffected.
+        stand_gain = float(fclip((float(com[2]) - 0.35) / 0.30, 0.0, 1.0))
+        balance *= stand_gain
 
         # ---------------- 3. reflexes --------------------------------
         reflex = np.zeros(n)
@@ -316,13 +323,15 @@ class MotorSystem:
             for i, nm in enumerate(self.names):
                 if "flex" in nm or "elbow" in nm or "knee" in nm:
                     reflex[i] += mag * self.limits[i] * 0.35
-        # righting reflex: keep the head and trunk upright
+        # righting reflex: keep the head and trunk upright (gated by
+        # standing height like the balance strategies: while prone it would
+        # drag every arch back to nominal)
         righting = np.zeros(n)
         for nm in ("spine_bend", "chest_bend", "neck_bend"):
             if nm in self.idx:
                 righting[self.idx[nm]] = -M.righting_gain * (
                     q[self.idx[nm]] - self.q_nom[self.idx[nm]]) * self.limits[
-                        self.idx[nm]] * 0.5
+                        self.idx[nm]] * 0.5 * stand_gain
         # vestibulo-collic: head stabilisation against trunk rotation
         vc = np.zeros(n)
         if "neck_bend" in self.idx:

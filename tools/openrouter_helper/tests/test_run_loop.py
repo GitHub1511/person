@@ -20,10 +20,13 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _helpers import find_bash as _find_bash, free_port as _free_port, wait_http as _wait_http, kill_proc as _kill_proc, kill_pid_file as _kill_pid_file
 
 HELPER = Path(__file__).resolve().parent.parent
 ROOT = HELPER.parents[1]
-BASH = r"C:\Program Files\Git\bin\bash.exe"
+BASH = _find_bash()
 FAILS = []
 
 
@@ -62,7 +65,7 @@ def main() -> int:
             pass
         pp = state / "proxy.pid"
         if pp.exists():
-            subprocess.run(["taskkill", "/F", "/PID", pp.read_text().strip()], capture_output=True)
+            _kill_pid_file(pp)
         for p in (run_proc[0], mock):
             try:
                 p.kill()
@@ -112,7 +115,7 @@ def main() -> int:
         if not killed_proxy and len(hist()) >= 3:
             pid = (state / "proxy.pid").read_text().strip() if (state / "proxy.pid").exists() else ""
             if pid:
-                subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
+                _kill_pid_file(state / "proxy.pid")
                 killed_proxy = True
                 print("  (killed the gateway after step 3)", flush=True)
         if not killed_mock and len(hist()) >= 6:

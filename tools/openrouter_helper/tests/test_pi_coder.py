@@ -14,10 +14,13 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _helpers import find_bash as _find_bash, free_port as _free_port, wait_http as _wait_http, kill_proc as _kill_proc, kill_pid_file as _kill_pid_file
 
 HELPER = Path(__file__).resolve().parent.parent
 ROOT = HELPER.parents[1]
-BASH = r"C:\Program Files\Git\bin\bash.exe"
+BASH = _find_bash()
 FAILS = []
 
 
@@ -62,7 +65,7 @@ def run_case(label, command, port_mock, port_proxy, expect_blocked, marker=None)
         subprocess.run([BASH, h, "stop"], env=env, capture_output=True, timeout=20)
         pp = state / "proxy.pid"
         if pp.exists():
-            subprocess.run(["taskkill", "/F", "/PID", pp.read_text().strip()], capture_output=True)
+            _kill_pid_file(pp)
         mock.kill()
     return sb
 

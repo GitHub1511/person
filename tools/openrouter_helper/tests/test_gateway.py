@@ -14,6 +14,9 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _helpers import free_port as _free_port, wait_http as _wait_http, kill_proc as _kill_proc
 
 HERE = Path(__file__).resolve().parent
 HELPER = HERE.parent
@@ -38,7 +41,8 @@ class Rig:
         self.env = dict(os.environ, **base)
         self.mock = subprocess.Popen([PY, str(HERE / "mock_upstream.py"), str(port_mock)],
                                      env=dict(os.environ, **(mock_env or {})))
-        time.sleep(0.8)
+        if not _wait_http(f"http://127.0.0.1:{port_mock}/", timeout=0.1):
+            time.sleep(0.8)  # mock has no health route; brief settle, then proxy poll decides
         self.start()
 
     def start(self):
@@ -71,10 +75,20 @@ class Rig:
 
     def close(self):
         for p in (self.proxy, self.mock):
-            try:
-                p.kill()
-            except Exception:
-                pass
+            _kill_proc(p)
+
+
+def _ports(n: int) -> list[int]:
+    seen: set[int] = set()
+    out: list[int] = []
+    for _ in range(n):
+        for _ in range(20):
+            q = _free_port()
+            if q not in seen:
+                seen.add(q)
+                out.append(q)
+                break
+    return out
 
 
 def main() -> int:
