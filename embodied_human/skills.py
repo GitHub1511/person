@@ -1656,11 +1656,13 @@ class SkillSystem:
                     # Caught a big roll onto the folded knees: straight to kneel.
                     self.events.append("stand_up: caught the roll, kneeling")
             elif not self._rec_pressed:
-                # Cobra setup: bring the hands back BESIDE the chest with
-                # bent elbows (pressing from overhead arms pushes only air).
+                # Hand-plant: arms straight DOWN at the sides (elbows nearly
+                # extended) so the hands touch the ground beside the chest.
+                # Bent elbows tuck the hands 11-15 cm into the air (measured,
+                # zero contact force) and no anchor can ever form.
                 yield from self._rec_hold(
-                    {"elbow_l": -1.30, "elbow_r": -1.30,
-                     "sh_l_flex": 0.15, "sh_r_flex": 0.15,
+                    {"elbow_l": -0.15, "elbow_r": -0.15,
+                     "sh_l_flex": 0.05, "sh_r_flex": 0.05,
                      "hip_l_flex": -0.10, "hip_r_flex": -0.10,
                      "knee_l": 0.20, "knee_r": 0.20,
                      "spine_bend": 0.0, "chest_bend": 0.0},
