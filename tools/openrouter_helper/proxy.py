@@ -168,7 +168,7 @@ def call_upstream(model: str, messages: list, max_tokens: int, extra: dict, iden
     """One streamed request to OpenRouter; returns an assembled chat.completion dict."""
     key = os.environ.get("OPENROUTER_API_KEY", "")
     payload = {"model": model, "messages": messages, "max_tokens": max_tokens, "stream": True}
-    for k in ("temperature", "top_p", "stop", "seed"):
+    for k in ("temperature", "top_p", "stop", "seed", "tools", "tool_choice", "parallel_tool_calls"):
         if k in extra:
             payload[k] = extra[k]
     req = urllib.request.Request(UPSTREAM, data=json.dumps(payload).encode(), method="POST", headers={
@@ -178,6 +178,7 @@ def call_upstream(model: str, messages: list, max_tokens: int, extra: dict, iden
         "HTTP-Referer": (ident or {}).get("HTTP-Referer", "http://localhost/person-helper"),
         "X-Title": (ident or {}).get("X-Title", "person-sim helper")})
     text, reasoning, usage, finish, mid = [], [], {}, None, model
+    calls: dict[int, dict] = {}                   # streamed tool-call fragments, by index
     try:
         resp = urllib.request.urlopen(req, timeout=READ_TIMEOUT)
     except urllib.error.HTTPError as e:
@@ -216,11 +217,26 @@ def call_upstream(model: str, messages: list, max_tokens: int, extra: dict, iden
                     text.append(d["content"])
                 if d.get("reasoning"):
                     reasoning.append(d["reasoning"])
+                for tc in d.get("tool_calls") or []:
+                    c = calls.setdefault(int(tc.get("index", 0)), {"id": "", "type": "function",
+                                                                     "function": {"name": "", "arguments": ""}})
+                    if tc.get("id"):
+                        c["id"] = tc["id"]
+                    fn = tc.get("function") or {}
+                    if fn.get("name"):
+                        c["function"]["name"] += fn["name"]
+                    if fn.get("arguments"):
+                        c["function"]["arguments"] += fn["arguments"]
                 if ch.get("finish_reason"):
                     finish = ch["finish_reason"]
+    msg = {"role": "assistant", "content": "".join(text)}
+    if calls:
+        msg["tool_calls"] = [calls[i] for i in sorted(calls)]
+        for n, c in enumerate(msg["tool_calls"]):
+            c["id"] = c["id"] or f"call_{n}"
+        msg["content"] = msg["content"] or None
     return {"id": "gen-proxy", "object": "chat.completion", "model": mid,
-            "choices": [{"index": 0, "message": {"role": "assistant", "content": "".join(text)},
-                         "finish_reason": finish or "stop"}],
+            "choices": [{"index": 0, "message": msg, "finish_reason": finish or ("tool_calls" if calls else "stop")}],
             "usage": usage, "x_reasoning_chars": sum(len(r) for r in reasoning)}
 
 
@@ -238,8 +254,9 @@ def handle_chat(body: dict, ident: dict | None = None) -> tuple[int, dict]:
                                        "code": "quota_exhausted", "retry_after": seconds_to_midnight()}}
             mid = m["id"]
             mt = U.max_tokens_for(m)
-            if "max_tokens" in body:
-                mt = min(mt, int(body["max_tokens"]))
+            asked = body.get("max_tokens") or body.get("max_completion_tokens")
+            if asked:
+                mt = min(mt, int(asked))
             U.wait_turn()
             t0 = time.time()
             U.count(mid)                          # every attempt counts, conservatively
@@ -248,7 +265,7 @@ def handle_chat(body: dict, ident: dict | None = None) -> tuple[int, dict]:
                 out = call_upstream(mid, messages, mt, body, ident)
                 U.d["consec_fail"][mid] = 0
                 U.save()
-                content = out["choices"][0]["message"]["content"]
+                content = out["choices"][0]["message"]["content"] or ""
                 log_request({"t": time.time(), "model": mid, "status": 200, "s": round(time.time() - t0, 1),
                              "max_tokens": mt, "out_chars": len(content), "usage": out.get("usage", {}),
                              "n_today": U.d["counts"].get(mid, 0)})
@@ -328,7 +345,33 @@ class H(BaseHTTPRequestHandler):
             return self._send(400, {"error": {"message": "bad json"}})
         ident = {k: self.headers[k] for k in ("HTTP-Referer", "X-Title") if self.headers.get(k)}
         code, obj = handle_chat(body, ident or None)
-        self._send(code, obj)
+        if body.get("stream") and code == 200:
+            self._send_sse(obj)
+        else:
+            self._send(code, obj)
+
+    def _send_sse(self, obj: dict) -> None:
+        """The reply is already complete; replay it as an event stream for clients (agents) that
+        insist on streaming."""
+        ch = obj["choices"][0]
+        msg = ch["message"]
+        delta = {"role": "assistant"}
+        if msg.get("content"):
+            delta["content"] = msg["content"]
+        if msg.get("tool_calls"):
+            delta["tool_calls"] = [dict(c, index=i) for i, c in enumerate(msg["tool_calls"])]
+        base = {"id": obj.get("id", "gen-proxy"), "object": "chat.completion.chunk", "model": obj.get("model", "")}
+        chunks = [dict(base, choices=[{"index": 0, "delta": delta, "finish_reason": None}]),
+                  dict(base, choices=[{"index": 0, "delta": {}, "finish_reason": ch.get("finish_reason", "stop")}]),
+                  dict(base, choices=[], usage=obj.get("usage") or {})]
+        data = "".join("data: " + json.dumps(c) + "\n\n" for c in chunks) + "data: [DONE]\n\n"
+        raw = data.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
 
 
 def probe() -> int:
