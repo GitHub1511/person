@@ -57,8 +57,8 @@ for i in range(36000):
         labels.append(f"t+{(i+1)//1000}s com{st.com[2]:.2f}")
 print("fallen:", ag.state.fallen, "com_z:", round(float(ag.state.com[2]), 3))
 print("events:", ag.skills.events[-6:])
-fig, axes = plt.subplots(4, 3, figsize=(15, 14))
-for k in range(11):
+fig, axes = plt.subplots(3, 3, figsize=(15, 12))
+for k in range(9):
     r, c = k // 3, k % 3
     if k < len(shots):
         axes[r][c].imshow(shots[k])
