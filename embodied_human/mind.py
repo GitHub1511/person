@@ -127,6 +127,10 @@ TASK = (
     "Available calls:\n" + API_DOC + "\n\n"
     "Write 0 to 3 calls in <answer>, one per line, with literal arguments only. "
     "An empty answer or nothing() means do nothing for now. "
+    "Issue at most ONE movement (walk_to/walk/grab/put_down/reach/turn) per "
+    "answer; the body only does one thing at a time. "
+    "A heard voice is someone else talking to you: never repeat it back with "
+    "say(). Only say() your own words, or stay silent. "
     "The <answer> must contain ONLY those calls, no prose. Example:\n"
     "<answer>\nlook_at(\"apple\")\nwalk_to(\"table\")\n</answer>"
 )
@@ -167,7 +171,7 @@ def _const(node):
     raise ValueError("only literal arguments are allowed")
 
 
-def parse_calls(answer: str, max_calls: int = 4) -> tuple[list, list]:
+def parse_calls(answer: str, max_calls: int = 3) -> tuple[list, list]:
     """Parse ``answer`` into whitelisted calls.  Never evaluates anything."""
     text = answer.strip()
     text = re.sub(r"^```(?:python)?\s*|\s*```$", "", text, flags=re.M).strip()
