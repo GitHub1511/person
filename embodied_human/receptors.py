@@ -405,6 +405,11 @@ class TactileSystem:
         vel_term = np.exp(-0.5 * ((self._brush_velocity - T.ct_optimal_velocity)
                                   / T.ct_velocity_width) ** 2)
         drive_ct = 0.25 * band_sa + 0.10 * normal * vel_term
+        # Contact transients can be huge (full body weight landing in one
+        # tick); clamp the fast drives so the adaptation states cannot
+        # overflow to inf/NaN (observed in live AZR runs).
+        drive_fa1 = fclip(drive_fa1, -50.0, 50.0)
+        drive_fa2 = fclip(drive_fa2, -50.0, 50.0)
 
         self.adapt_sa1 += (dt / A.tau_sa1) * (drive_sa1 - self.adapt_sa1)
         self.adapt_sa2 += (dt / A.tau_sa2) * (drive_sa2 - self.adapt_sa2)
