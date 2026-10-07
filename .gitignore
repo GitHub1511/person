@@ -1,7 +1,11 @@
-__pycache__/
+﻿__pycache__/
 *.pyc
 out/
 out_smoke/
 *.gguf
 *.safetensors
 .claude/
+
+# LM Studio orchestrator output (changes live; remove these two lines to publish it)
+orchestrator/
+AI_LOG.txt
