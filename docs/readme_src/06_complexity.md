@@ -51,7 +51,7 @@ level).
 * `senses_ext.py` adds the cell populations of §3.3: 439 / 3,032 / 6,400 / 12,784 non-visual values per frame at
   `base` / `rich` / `extreme` / `max`, plus the retina bank (12,096 to 86,016 values).
 
-### 17.3 Eyes that dry and blink (`ocular.py`, 429 lines)
+### 17.3 Eyes that dry and blink (`ocular.py`)
 
 Each eye has a tear film that thins and evaporates (96 film sectors per eye at `extreme`, 16 at `base`), a
 meniscus reservoir fed by the lacrimal gland, lipid and mucin layers, and a population of corneal nerve
