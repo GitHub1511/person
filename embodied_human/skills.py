@@ -1607,8 +1607,6 @@ class SkillSystem:
                 if not table_ok:
                     # Caught a big roll onto the folded knees: straight to kneel.
                     self.events.append("stand_up: caught the roll, kneeling")
-            elif self._rec_chest_face_z() > 0.50:
-                yield from self._rec_situp()
             else:
                 # Cobra setup: bring the hands back BESIDE the chest with
                 # bent elbows (pressing from overhead arms pushes only air).
@@ -1970,9 +1968,6 @@ class SkillSystem:
         ag = self.agent
         if self._rec_chest_face_z() < -0.50 or self._rec_com() > 0.35:
             return
-        if self._rec_chest_face_z() > 0.50:
-            self.events.append("stand_up: already supine")
-            return
 
         sign = 1.0 if self._recover_attempts % 2 == 1 else -1.0
         t0 = ag.t
@@ -1981,7 +1976,7 @@ class SkillSystem:
         prev = self._rec_com()
         peak = prev
         tucked = False
-        while ag.t - t0 < 12.0:
+        while ag.t - t0 < 16.0:
             face = self._rec_chest_face_z()
             com = self._rec_com()
             peak = max(peak, com)
@@ -1989,9 +1984,6 @@ class SkillSystem:
             prev = com
             if face < -0.50 or com > 0.35:
                 self.events.append("stand_up: rolled prone")
-                return
-            if face > 0.50:
-                self.events.append("stand_up: rolled supine")
                 return
             if tucked and com > 0.42:
                 # caught a big rock onto the folded knees: skip ahead
