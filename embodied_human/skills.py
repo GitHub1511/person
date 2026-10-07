@@ -572,9 +572,12 @@ class SkillSystem:
             if bump <= 1e-4:
                 return                    # the ear did not move: inaudible
             speaking = bool(self.speech.speaking or self.speech.jaw > 1e-3)
+            # m0 runs ~0.2 in a quiet room (spikes ~1.0 on footstep transients);
+            # chair-quiet lands at conf ~0.87, a footstep costs audibility but
+            # rarely silence, far/whisper fall below the 0.25 floor.
             snr = min(V, 1.0 + float(np.log1p(5000.0 * bump))) \
-                - 1.5 * m0 - (0.6 if speaking else 0.0)
-            z = max(-50.0, min(50.0, (snr - 1.75) * 2.2))  # never overflow
+                - 0.8 * m0 - (0.6 if speaking else 0.0)
+            z = max(-50.0, min(50.0, (snr - 1.6) * 2.2))  # never overflow
             conf = float(1.0 / (1.0 + np.exp(-z)))
             if conf < 0.25:
                 return                    # inaudible: no entry, no poke, silence
@@ -1816,10 +1819,7 @@ class SkillSystem:
                     6.0, lambda: self._rec_com() > 0.60, "lunge-press")
                 self._rec_pressed = True
                 self.events.append("stand_up: pressed up from lunge")
-                self._rec_pressed = True
             elif table_ok:
-                self._rec_caught = True
-                self.events.append("stand_up: table climb worked, kneeling")
             if self._rec_caught:
                 if not table_ok:
                     # Caught a big roll onto the folded knees: straight to kneel.
