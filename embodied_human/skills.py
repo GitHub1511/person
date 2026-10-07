@@ -1827,7 +1827,7 @@ class SkillSystem:
                     best = self._rec_chest_face_z()
                 last_flip = ag.t
             full = dict(self.q_nom_map)
-            full.update(pose(sign, pump))
+            full.update(self._rec_roll_pose(sign, pump))
             self._rec_set({nm: tv for nm, tv in full.items()
                            if nm in ag.meta.qpos_addr})
             yield
