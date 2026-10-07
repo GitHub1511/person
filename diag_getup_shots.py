@@ -33,7 +33,13 @@ shots = []
 
 
 def snap():
-    renderer.update_scene(ag.data, camera="observer", scene_option=opt)
+    cam = mujoco.MjvCamera()
+    cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+    cam.lookat[:] = ag.state.com
+    cam.distance = 2.4
+    cam.elevation = -8.0
+    cam.azimuth = 135.0
+    renderer.update_scene(ag.data, camera=cam, scene_option=opt)
     shots.append(renderer.render().copy())
 
 
