@@ -95,6 +95,37 @@ wait_for_coder() {
   rm -f "$STATE/CODER_DONE"
 }
 
+winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
+
+# Run the Pi coding agent on state/next_task.md, inside the permission guard (pi_agent/extensions/guard.ts):
+# - its model is the local gateway only (order, 200/model, 20/min, 1000/day all still apply)
+# - the real API key is NOT in its environment (the gateway process holds it)
+# - tools: read/bash/edit/write/grep/find/ls; no MCP, skills, themes or project-local extensions
+# - a tool-call budget and a wall-clock limit; every call is logged to state/pi_audit.jsonl
+coder_run() {
+  command -v pi >/dev/null 2>&1 || { log "pi is not installed; waiting for a manual coder instead"; return 1; }
+  local home="$STATE/pi_home"
+  mkdir -p "$home" "$STATE/pi_sessions"
+  cp -f "$HERE/pi_agent/settings.json" "$HERE/pi_agent/APPEND_SYSTEM.md" "$home/"
+  sed "s#http://127.0.0.1:8765/v1#http://127.0.0.1:$PORT/v1#" "$HERE/pi_agent/models.json" >"$home/models.json"
+  local wroot wstate
+  wroot="$(winpath "$ROOT")"; wstate="$(winpath "$STATE")"
+  log "starting the Pi coder (limit ${CODER_TIMEOUT:-3600}s, guard on, audit: $STATE/pi_audit.jsonl)"
+  env -u OPENROUTER_API_KEY \
+      PI_CODING_AGENT_DIR="$(winpath "$home")" PI_OFFLINE=1 HELPER_ROOT="$wroot" HELPER_STATE="$wstate" \
+      PI_MAX_TOOL_CALLS="${PI_MAX_TOOL_CALLS:-400}" \
+    timeout "${CODER_TIMEOUT:-3600}" pi -p --no-approve --no-context-files --no-skills --no-prompt-templates \
+      --no-themes --no-mcp --no-extensions -e "$(winpath "$HERE/pi_agent/extensions/guard.ts")" \
+      --session-dir "$(winpath "$STATE/pi_sessions")" \
+      --tools read,bash,edit,write,grep,find,ls \
+      "@$(winpath "$STATE/next_task.md")" \
+      "Carry out the task in the attached file, then finish with the report it asks for." \
+      >"$STATE/pi_last_output.txt" 2>&1
+  local rc=$?
+  log "Pi coder finished (exit $rc); output in $STATE/pi_last_output.txt"
+  return 0
+}
+
 cmd_run() {
   rm -f "$STATE/STOP" "$STATE/CODER_DONE"
   trap 'proxy_stop; log "helper stopped"; exit 0' INT TERM
@@ -117,7 +148,7 @@ cmd_run() {
     fi
     fails=0
     title=$("$PY" -c "import json;print(json.load(open('$STATE/next_plan.json'))['title'])" 2>/dev/null || echo "?")
-    wait_for_coder
+    if [ "${AUTO_CODER:-1}" = "1" ] && coder_run; then :; else wait_for_coder; fi
     # even when asked to stop, never leave a step unverified: check it (and undo it if broken) first
     out=$(hl verify); echo "$out"
     if echo "$out" | head -1 | grep -q '^PASS'; then
@@ -155,6 +186,7 @@ cmd_status() {
 case "${1:-}" in
   run)        cmd_run ;;
   plan)       cmd_plan ;;
+  coder)      proxy_start && coder_run ;;
   serve)      cmd_serve ;;
   done)       touch "$STATE/CODER_DONE"; log "marked done" ;;
   probe)      "$PY" "$HERE/proxy.py" --probe ;;
