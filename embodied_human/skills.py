@@ -1879,8 +1879,12 @@ class SkillSystem:
         last_flip = ag.t
         best = self._rec_chest_face_z()
         while ag.t - t0 < 12.0:
-            if self._rec_chest_face_z() < -0.50 or self._rec_com() > 0.35:
+            face = self._rec_chest_face_z()
+            if face < -0.50 or self._rec_com() > 0.35:
                 self.events.append("stand_up: rolled prone")
+                return
+            if face > 0.50:
+                self.events.append("stand_up: rolled supine")
                 return
             # pump the swing at ~0.8 Hz to rock over the hump; static holds
             # alone rock up part-way and fall back
