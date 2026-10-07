@@ -72,42 +72,84 @@ class _MS(ctypes.Structure):
 
 
 def _cpu_busy(sample: float = 0.4) -> float:
-    class FT(ctypes.Structure):
-        _fields_ = [("lo", ctypes.c_ulong), ("hi", ctypes.c_ulong)]
+    if sys.platform == "win32":
+        class FT(ctypes.Structure):
+            _fields_ = [("lo", ctypes.c_ulong), ("hi", ctypes.c_ulong)]
 
-    def rd():
-        i, k, u = FT(), FT(), FT()
-        ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(i), ctypes.byref(k), ctypes.byref(u))
-        v = lambda f: (f.hi << 32) | f.lo
-        return v(i), v(k), v(u)
+        def rd():
+            i, k, u = FT(), FT(), FT()
+            ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(i), ctypes.byref(k), ctypes.byref(u))
+            v = lambda f: (f.hi << 32) | f.lo
+            return v(i), v(k), v(u)
+        try:
+            a = rd(); time.sleep(sample); b = rd()
+            idle, kern, user = (b[0] - a[0]), (b[1] - a[1]), (b[2] - a[2])
+            tot = kern + user
+            return float(1.0 - idle / tot) if tot > 0 else 0.0
+        except Exception:
+            return 0.3
+    # POSIX fallback: 1-minute load average scaled by CPU count.
     try:
-        a = rd(); time.sleep(sample); b = rd()
-        idle, kern, user = (b[0] - a[0]), (b[1] - a[1]), (b[2] - a[2])
-        tot = kern + user
-        return float(1.0 - idle / tot) if tot > 0 else 0.0
-    except Exception:
+        load1, _, _ = os.getloadavg()
+        cores = os.cpu_count() or 4
+        return max(0.0, min(0.99, load1 / cores))
+    except (OSError, AttributeError):
         return 0.3
+
+
+def _mem_gb() -> tuple[float, float, float]:
+    """(total, free, commit_free) in GB. Windows via GlobalMemoryStatusEx; POSIX via sysconf/meminfo."""
+    if sys.platform == "win32":
+        try:
+            m = _MS(); m.l = ctypes.sizeof(_MS)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
+            return m.tp / 2 ** 30, m.ap / 2 ** 30, m.apf / 2 ** 30
+        except Exception:
+            pass
+    try:
+        if sys.platform != "win32" and hasattr(os, "sysconf"):
+            pages = os.sysconf("SC_PHYS_PAGES")
+            page = os.sysconf("SC_PAGE_SIZE")
+            av_pages = os.sysconf("SC_AVPHYS_PAGES")
+            total = pages * page / 2 ** 30
+            free = av_pages * page / 2 ** 30
+            return total, free, free
+    except (OSError, ValueError, AttributeError):
+        pass
+    try:
+        info = {}
+        with open("/proc/meminfo", encoding="utf-8") as f:
+            for line in f:
+                k, _, v = line.partition(":")
+                info[k.strip()] = int(v.strip().split()[0]) / 1024 / 1024
+        total = info.get("MemTotal", 0.0)
+        free = info.get("MemAvailable", info.get("MemFree", 0.0))
+        return total, free, free
+    except (OSError, ValueError):
+        return 0.0, 0.0, 8.0
 
 
 def resources() -> dict:
     cores = os.cpu_count() or 4
-    r = {"cores": cores, "cpu_busy": 0.3, "ram_total_gb": 0.0, "ram_free_gb": 0.0, "commit_free_gb": 8.0}
-    try:
-        m = _MS(); m.l = ctypes.sizeof(_MS)
-        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
-        r.update(ram_total_gb=m.tp / 2 ** 30, ram_free_gb=m.ap / 2 ** 30, commit_free_gb=m.apf / 2 ** 30)
-    except Exception:
-        pass
+    total, free, commit = _mem_gb()
+    r = {"cores": cores, "cpu_busy": 0.3, "ram_total_gb": total, "ram_free_gb": free,
+         "commit_free_gb": commit if commit else 8.0}
     r["cpu_busy"] = _cpu_busy()
     fp = {"gb_per_instance": 1.3, "ms_per_step": None, "level": "base (assumed)"}
     f = STATE / "footprint.json"
     if f.exists():
         try:
-            fp.update(json.loads(f.read_text()))
-        except ValueError:
+            fp.update(json.loads(f.read_text(encoding="utf-8", errors="replace")))
+        except (ValueError, OSError):
             pass
+    try:
+        gb = float(fp.get("gb_per_instance", 1.3))
+        if not (gb > 0 and gb < 100):
+            gb = 1.3
+    except (TypeError, ValueError):
+        gb = 1.3
+    fp["gb_per_instance"] = gb
     r["footprint"] = fp
-    gb = float(fp["gb_per_instance"])
     by_cpu = int(cores * (1.0 - r["cpu_busy"]) - 2)
     by_commit = int((r["commit_free_gb"] - 3.0) / gb)            # leave 3 GB of commit for everything else
     by_ram = int(r["ram_free_gb"] * 1.8 / gb)                    # some paging is tolerable, thrashing is not
@@ -637,17 +679,40 @@ def _public_url(u: str) -> bool:
     import ipaddress
     import socket
     from urllib.parse import urlparse
-    p = urlparse(u)
+    try:
+        p = urlparse(u)
+    except ValueError:
+        return False
     if p.scheme not in ("http", "https") or not p.hostname:
         return False
+    # Only default ports: non-standard ports often expose admin/debug services.
     try:
-        for fam, _, _, _, sa in socket.getaddrinfo(p.hostname, None):
+        port = p.port
+    except ValueError:
+        return False
+    if port is not None and port not in (80, 443):
+        return False
+    try:
+        infos = socket.getaddrinfo(p.hostname, None)
+    except OSError:
+        return False
+    if not infos:
+        return False
+    try:
+        for fam, _, _, _, sa in infos:
             ip = ipaddress.ip_address(sa[0])
             if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
                 return False                      # never reach into the local network
-    except OSError:
+    except (OSError, ValueError):
         return False
     return True
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects: the Location target was never allow-listed (SSRF via 302)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 def _html_to_text(html: str) -> str:
