@@ -269,7 +269,7 @@ class MuscleBank:
         self.tlim = np.maximum(torque_limit, 1.0)
         self.active_frac = np.zeros(self.nm)
         self.capacity = np.ones(self.nm)
-        self.size = 3 * self.nm * self.nu + 2 * self.nm
+        self.size = 2 * self.nm * self.nu + 2 * self.nm
 
     def update(self, dt, tau, perfusion):
         """tau: joint torques (n_joints,) ; perfusion: per-muscle blood flow (nm,)."""
@@ -297,9 +297,7 @@ class MuscleBank:
                 "active": float(self.active_frac.mean())}
 
     def state(self):
-        return np.concatenate([self.fatigue.ravel(), self.glycogen.ravel(),
-                               np.broadcast_to(self.soreness[:, None], (self.nm, self.nu)).ravel() * 0 + 0.0,
-                               self.soreness, self.temp])[: self.size]
+        return np.concatenate([self.fatigue.ravel(), self.glycogen.ravel(), self.soreness, self.temp])
 
 
 # ==========================================================================
@@ -513,7 +511,12 @@ class Chemistry:
                 pre = rng.choice(idx, size=min(3, len(idx) - 1), replace=False)
                 A[j, pre] = rng.normal(0, 0.12, len(pre))
         # keep the linear system stable: scale so that the spectral radius is < 0.6
-        rad = np.max(np.abs(np.linalg.eigvals(A))) if n <= 600 else 1.0
+        v = rng.standard_normal(n)
+        rad = 1.0
+        for _ in range(60):
+            v = A @ v
+            rad = float(np.linalg.norm(v)) + 1e-12
+            v = v / rad
         self.A = A * (0.6 / rad if rad > 0.6 else 1.0)
         self.noise = 0.01
         self.rng = rng

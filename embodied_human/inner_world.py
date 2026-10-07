@@ -43,6 +43,7 @@ from .inner_brain import (POP_NAMES, PI, CircadianClock, Conditioning, EpisodicM
 from .inner_organs import (Chemistry, GutMicrobiome, Immune, Kidney, Liver, Lungs, MuscleBank,
                            SkinThermo, VascularBeds)
 from .interoception import IDX, N_INTEROCEPTION
+from .receptors import CH
 
 N_INNER_SUMMARY = 128
 N_OCULAR_SUMMARY = 16
@@ -436,8 +437,7 @@ class InnerWorld:
         o.sleep_pressure = self.clock.sleep_pressure
         f = ag.frame
         shift = 0.0
-        if f is not None and f.tactile.size and "ischemia" in __import__("embodied_human.receptors", fromlist=["CH"]).CH:
-            from .receptors import CH
+        if f is not None and f.tactile.size and "ischemia" in CH:
             shift = float(np.clip(np.percentile(f.tactile[:, CH["ischemia"]], 99) * 8.0, 0, 1.3))
         oc = ag.ocular.out
         o.extra_drives = np.array([
