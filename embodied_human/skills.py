@@ -2211,7 +2211,16 @@ class SkillSystem:
                 # holds alone rock up part-way and fall back
                 pump = 0.55 + 0.45 * float(np.sin(2 * np.pi * 0.8 * (ag.t - t0)))
                 if ag.t - last_flip > 3.0:
-                    if self._rec_chest_face_z() < best - 0.05:
+                    gap = self._rec_furniture_gap()
+                    if gap > 0.6:
+                        # far from the table: roll TOWARD it (the climb
+                        # needs it); face progress resumes when close
+                        if gap < best_gap - 0.05:
+                            best_gap = gap
+                        else:
+                            sign = -sign
+                            best_gap = gap
+                    elif self._rec_chest_face_z() < best - 0.05:
                         best = self._rec_chest_face_z()
                     else:
                         sign = -sign  # wrong side: mirror the whole pose
