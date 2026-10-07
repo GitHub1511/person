@@ -105,7 +105,7 @@ def behavior_channels() -> str:
     rows = []
     for name, size in c["layout"]:
         rows.append([f"`{name}`", f"{size:,}", f"{log10(size):.2f}"])
-    rows.append(["**product (all 34 layout entries)**", f"**{int(c['descriptors']['exact']):,}**",
+    rows.append(["**product (all 33 layout entries)**", f"**{int(c['descriptors']['exact']):,}**",
                  f"**{c['descriptors']['log10']:.3f}**"])
     return table(rows, ["channel", "choices", "log10"])
 
