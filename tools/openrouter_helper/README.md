@@ -56,14 +56,34 @@ ladder and the working value is remembered.
 So for the planner, effectively three models share the day (600 requests), and `inkling-small` is only
 reachable through a listed coding agent.
 
+## The Pi coder (automatic, with a permission guard)
+
+`helper.sh run` now starts [Pi](https://pi.dev) itself for the coder step (`AUTO_CODER=0` goes back to
+waiting for a coder you start yourself; `helper.sh coder` runs just that step once).
+
+| piece | how |
+|---|---|
+| model | only the local gateway (`pi_agent/models.json`), so order / 200 per model / 20 per min / 1000 per day still hold; Pi identifies itself honestly (`HTTP-Referer: https://pi.dev`, `X-Title: pi`), which is why `inkling-small` works for it |
+| key | the real OpenRouter key is **not** in Pi's environment; only the gateway process has it |
+| config | an isolated agent directory (`state/pi_home`), so your own `~/.pi` and its logins are untouched |
+| tools | `read bash edit write grep find ls`; no MCP, skills, themes, context files or project-local extensions |
+| limits | `CODER_TIMEOUT` (default 3600 s), `PI_MAX_TOOL_CALLS` (default 400) |
+| guard | `pi_agent/extensions/guard.ts` blocks, and logs to `state/pi_audit.jsonl`: `git push/remote/credentials`, `gh`, recursive deletes, system/security settings, package installs, web requests that *send* data (plain GET is fine), `ssh/nc/scp…`, `sudo`, reading `.env` / `auth.json` / `.ssh`, writing outside the project or into `tools/openrouter_helper/` / `.git`, and the loop's own `run/stop/rollback` commands |
+| net | after the coder, `verify` always runs; a failing step is rolled back |
+
+**What the guard is not:** a sandbox. It matches commands by pattern, so a determined or confused model can
+find a way around it (Pi's own docs say it has no built-in sandbox). What actually contains damage is: the
+key is not in the process, every step is snapshotted and verified, and nothing is pushed. For real isolation
+run the whole thing in a container or VM.
+
+**Quota note:** every model turn of the coder is one gateway request. A step with 30 tool calls uses ~30 of
+the 200 per model, so expect on the order of 10-30 coder steps per day across the models.
+
 ## What it deliberately does not do
 
-* **It does not launch a coding agent.** The coder step (reading `next_task.md`, editing, running things
-  in a shell, fetching docs) is yours to start, with whatever tool you trust (for example Pi, pointed at
-  `http://127.0.0.1:8765/v1` so that the model order and request limits still apply, with your own
-  harness identity in its headers). Automating that launch is the one thing left out.
 * It never changes `tools/openrouter_helper/` or `.env`; `verify` fails if a coder did.
 * It does not use paid models.
+* It never pushes to GitHub.
 
 ## Files
 
@@ -101,4 +121,5 @@ that moment (this PC usually has only 3-5 GB of RAM free because of other applic
 python tools/openrouter_helper/tests/test_gateway.py       # order, quotas, rate limit, 429, 404, gating, restart, day rollover
 python tools/openrouter_helper/tests/test_safety_net.py    # snapshot / verify / rollback / protection on a sandbox copy
 python tools/openrouter_helper/tests/test_run_loop.py 9    # the whole `run` loop, with a fake coder, kills and restarts
+python tools/openrouter_helper/tests/test_pi_coder.py      # real Pi -> gateway -> mock model; guard allows/blocks
 ```
