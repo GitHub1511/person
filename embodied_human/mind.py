@@ -126,7 +126,9 @@ TASK = (
     "say(...) is spoken aloud.\n\n"
     "Available calls:\n" + API_DOC + "\n\n"
     "Write 0 to 3 calls in <answer>, one per line, with literal arguments only. "
-    "An empty answer or nothing() means do nothing for now."
+    "An empty answer or nothing() means do nothing for now. "
+    "The <answer> must contain ONLY those calls, no prose. Example:\n"
+    "<answer>\nlook_at(\"apple\")\nwalk_to(\"table\")\n</answer>"
 )
 
 ALLOWED_CALLS = {
@@ -391,29 +393,61 @@ class OpenAICompatBackend(Backend):
 
     def generate(self, prompt, ctx=None, max_new_tokens=320, on_text=None, stop=None):
         import requests
+        stops = stop or ["</answer>", "\nUser:"]
         body = {"model": self.model, "prompt": prompt, "max_tokens": max_new_tokens,
                 "temperature": self.temperature, "top_p": self.top_p, "stream": True,
-                "stop": stop or ["</answer>", "\nUser:"]}
+                "stop": stops}
         out = ""
-        with requests.post(self.base + "/completions", json=body, stream=True,
-                           headers=self.headers, timeout=self.timeout) as r:
-            r.raise_for_status()
-            for line in r.iter_lines():
-                if not line:
-                    continue
-                s = line.decode("utf-8", "ignore")
-                if s.startswith("data:"):
-                    s = s[5:].strip()
-                if s == "[DONE]":
-                    break
-                try:
-                    j = json.loads(s)
-                    piece = j["choices"][0].get("text", "")
-                except Exception:
-                    continue
-                out += piece
-                if on_text:
-                    on_text(out)
+        try:
+            with requests.post(self.base + "/completions", json=body, stream=True,
+                               headers=self.headers, timeout=self.timeout) as r:
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if not line:
+                        continue
+                    s = line.decode("utf-8", "ignore")
+                    if s.startswith("data:"):
+                        s = s[5:].strip()
+                    if s == "[DONE]":
+                        break
+                    try:
+                        j = json.loads(s)
+                        piece = j["choices"][0].get("text", "")
+                    except Exception:
+                        continue
+                    out += piece
+                    if on_text:
+                        on_text(out)
+        except Exception:
+            # LM Studio / some OpenAI servers only serve /chat/completions:
+            # retry once with the prompt as a single user message.
+            chat_body = {"model": self.model,
+                         "messages": [{"role": "user", "content": prompt}],
+                         "temperature": self.temperature, "top_p": self.top_p,
+                         "max_tokens": max_new_tokens, "stream": True,
+                         "stop": stops}
+            out = ""
+            with requests.post(self.base + "/chat/completions", json=chat_body,
+                               stream=True, headers=self.headers,
+                               timeout=self.timeout) as r:
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if not line:
+                        continue
+                    s = line.decode("utf-8", "ignore")
+                    if s.startswith("data:"):
+                        s = s[5:].strip()
+                    if s == "[DONE]":
+                        break
+                    try:
+                        j = json.loads(s)
+                        delta = j["choices"][0].get("delta", {})
+                        piece = delta.get("content", "")
+                    except Exception:
+                        continue
+                    out += piece
+                    if on_text:
+                        on_text(out)
         return out + ("</answer>" if "<answer>" in out and "</answer>" not in out else "")
 
 
@@ -718,9 +752,26 @@ class Mind:
     # ------------------------------------------------------------------
     def _apply(self, reply: ParsedReply) -> None:
         sk = self.agent.skills
+        st = getattr(self.agent, "state", None)
+        bal = float(getattr(getattr(self.agent, "motor", None),
+                            "balance_error", 0.0) or 0.0)
+        fallen = bool(st is not None and st.fallen)
         for name, args, kwargs in reply.calls:
             target = ALLOWED_CALLS.get(name)
             if target is None:
+                continue
+            if fallen and target in ("walk_to", "walk", "turn", "grab",
+                                     "reach", "put_down", "crouch"):
+                sk.events.append(f"FAILED {name}: I am on the floor, cannot move")
+                continue
+            if bal > 0.06 and target in ("walk_to", "walk", "grab", "reach"):
+                # Unstable: stop first so the next think sees a calm body.
+                try:
+                    sk.api_stop()
+                except Exception:
+                    pass
+                sk.events.append(
+                    f"FAILED {name}: off balance ({bal:.3f m}), stood still instead")
                 continue
             fn = getattr(sk, "api_" + target)
             try:
