@@ -575,11 +575,9 @@ class SkillSystem:
             # placement); recovery drives the elbows to coordinate the press.
             hold = getattr(self, "_rec_hold_table", False)
             table_climb = getattr(self, "_rec_climbing", False)
-            for nm, val in self.recovery_targets.items():
-                if hold and not table_climb and not nm.startswith("elbow_") and \
-                        (nm.startswith("sh_")):
-                    continue
-                if hold and table_climb and (nm.startswith("sh_") or nm.startswith("elbow_")):
+            for nm, val in list(self.recovery_targets.items()):
+                if hold and (nm.startswith("sh_") or nm.startswith("wrist_") or
+                             (table_climb and nm.startswith("elbow_"))):
                     continue
                 i = self.motor_idx.get(nm)
                 if i is not None:
