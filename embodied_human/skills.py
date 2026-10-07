@@ -1664,14 +1664,17 @@ class SkillSystem:
             vel = (com - prev) / max(TICK, 1e-6)
             prev = com
             if not tucked and com > 0.24 and vel > 0.03:
-                tucked = True  # near the top: knees are unloaded, snatch them under
-            if tucked and com < 0.16:
-                tucked = False  # missed it: rock again
+                tucked = True  # near the top: fold the knees under and STAY
+                # folded — subsequent rocks pivot on the knees and climb
             if tucked:
+                push = max(0.0, float(np.sin(2 * np.pi * 0.55 * (ag.t - t0))))
+                arch = -0.05 - 0.30 * push
+                arm = 0.90 - 1.80 * push
                 self._rec_set({
-                    "spine_bend": -0.15, "chest_bend": -0.10,
+                    "spine_bend": arch, "chest_bend": 0.7 * arch,
+                    "neck_bend": -0.30 * push,
                     "elbow_l": -0.05, "elbow_r": -0.05,
-                    "sh_l_flex": 0.10, "sh_r_flex": 0.10,
+                    "sh_l_flex": arm, "sh_r_flex": arm,
                     "hip_l_flex": -1.10, "hip_r_flex": -1.10,
                     "knee_l": 1.90, "knee_r": 1.90})
             else:
