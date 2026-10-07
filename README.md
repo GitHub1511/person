@@ -22,7 +22,7 @@ generated from inside its own body.
 | The "mind" hook for the Absolute Zero Reasoner (§16.5) | `mind.py`, `run_mind.py` | prompt/parse/dispatch tested against a fake server; **AZR itself has never been run** |
 | Scalable complexity: skin density, sensory-cell populations, eyes, inner world (§17) | `complexity.py`, `senses_ext.py`, `ocular.py`, `inner_*.py` | built and unit-exercised; **sizes and speed at `rich`/`extreme` are not yet measured** (`tools/scale_complexity.py --measure` has not been completed) |
 | Generative behaviour space + learned body safety (§17.5-§17.6) | `behavior_*.py`, `body_learning.py`, `tools/train_body.py` | trained and evaluated at `base`: falls per sim-hour 307 -> 87 (§17.6); still falls |
-| Unattended planner + coder loop on free OpenRouter models (§18) | `tools/openrouter_helper/` | offline tests pass; live runs in progress; **its output is unreviewed machine-written code** |
+| Unattended planner + coder loop on free OpenRouter models (§18) | `tools/openrouter_helper/` | offline tests pass; two live steps ran and were accepted by its checks, but **both degraded olfaction/taste** (§18.1); stopped, nothing reverted |
 
 ```bash
 python -m pip install mujoco numpy matplotlib
@@ -710,3 +710,276 @@ python setup_azr.py                                  # what to do to get AZR
 * Diagnostic scripts for this part: `diag_wbc.py`, `diag_walk*.py`,
   `diag_skills.py`, `diag_bubbles.py`, `diag_mind_smoke.py`,
   `diag_mind_server.py`, `diag_app.py`.
+
+---
+
+## 17. Complexity levels, eyes, the inner world, and a generative behaviour space
+
+Everything in this section was added after §1-§16, to make the person's
+internal world much larger and its possible behaviour far more varied.  It is
+all *toy* modelling with plausible orders of magnitude; none of it claims to
+match a real mammal (a mouse has orders of magnitude more receptors than any
+level here).
+
+### 17.1 One dial: `complexity.py`
+
+Every size that scales is read from one `Complexity` profile, **once at import
+time** (the skin geometry, and therefore the MuJoCo model, is generated from
+it).  Choose it with `PERSON_COMPLEXITY=base|rich|extreme|max` (or a JSON file
+of overrides), or persistently with `tools/scale_complexity.py --set LEVEL`.
+The default is `extreme`.
+
+| knob | base | rich | extreme | max |
+|---|---|---|---|---|
+| skin density (linear; taxels grow as its square) | 1 | 2 | 3 | 4 |
+| extra per-taxel tactile channels | no | yes | yes | yes |
+| spindles / GTOs per muscle | 1 / 1 | 8 / 4 | 16 / 8 | 32 / 16 |
+| canal afferents per canal / otolith hair cells per organ | 1 / 1 | 24 / 64 | 64 / 192 | 128 / 384 |
+| cochlear bands per ear | 24 | 96 | 192 | 384 |
+| olfactory receptor types / taste cell types | 24 / 5 | 160 / 24 | 320 / 48 | 640 / 96 |
+| retina (w x h) | 48x36 | 72x54 | 96x72 | 128x96 |
+| corneal nerve units / tear-film sectors per eye | 16 / 16 | 96 / 48 | 192 / 96 | 384 / 192 |
+| neural-mass units | 512 | 4,096 | 12,288 | 32,768 |
+| motor units per muscle | 4 | 16 | 32 | 64 |
+| chemistry analytes | 48 | 240 | 480 | 960 |
+| circadian oscillators / episodic memory slots | 16 / 256 | 96 / 2,048 | 192 / 4,096 | 384 / 8,192 |
+| inner world on | no | yes | yes | yes |
+
+(`python tools/scale_complexity.py --list` prints the full table.)  At `base`
+the person is the original one of §2-§11.
+
+**Not yet measured:** the total number of sensory scalars, state variables,
+memory per instance and milliseconds per step at `rich`/`extreme`/`max`.
+`python tools/scale_complexity.py --measure rich extreme` builds each level in
+a separate process and reports them; that run has not been completed, so this
+README does not quote numbers for it.
+
+### 17.2 Denser skin and more receptors
+
+* `skin.default_patches()` multiplies each patch's taxel grid by the skin
+  density (`base` keeps the original 1,872 taxels).
+* `receptors.py` adds 17 extended tactile channels per taxel
+  (`EXTENDED_TACTILE_CHANNELS`), with sensitisation and fatigue modifiers fed
+  from the inner world, and the `ReceptorFrame.ext` dictionary for the extra
+  banks.
+* `senses_ext.py` generates *populations* of cells (spindles and Golgi tendon
+  organs, vestibular canal and otolith hair cells for both ears, a two-ear
+  cochlea, olfactory glomeruli, taste cells, a retina bank), each a thresholded,
+  saturating, adapting unit with randomised parameters.
+
+### 17.3 Eyes that dry and blink (`ocular.py`)
+
+Each eye has a tear film that thins and evaporates, a meniscus reservoir, lipid
+and mucin layers and a population of corneal nerve terminals (cold, polymodal
+nociceptor and lid-friction mechanoreceptor classes).  The *sensation of
+dryness* drives a blink central pattern generator, and it also reaches the rest
+of the person: dryness blurs vision, adds discomfort to affect, sensitises
+pain, adds an `ocular_comfort` drive and an urge to rub the eyes; staring
+suppresses blinking (which dries the eyes further); speaking, arousal and
+tiredness change the rate; sadness produces tears; dehydration dries the eyes;
+lids droop with sleepiness.  The eyes and lids are visible in the model
+(visual-only geoms moved at runtime).  Orders of magnitude (film ~3 um,
+break-up time 10-20 s, ~4-15 blinks a minute) are plausible; it is not a
+clinical model.
+
+### 17.4 The inner world (`inner_organs.py`, `inner_brain.py`, `inner_world.py`)
+
+On top of the original 67 interoceptive variables, 28 emotions, 25
+neuromodulators and 16 drives (all still present and still driving
+everything):
+
+* **Organs:** vascular beds, lungs (alveolar units), kidney (nephron groups),
+  liver zones, gut segments with a microbiome, ~3,300 motor units with fatigue
+  and soreness, per-patch skin thermoregulation, an immune network with
+  cytokines and tissue damage/healing, and a 480-channel blood/tissue chemistry
+  panel (a factor model with ~70 mechanistic channels).
+* **Brain side:** a circadian clock (~200 coupled oscillators plus sleep
+  pressure), a ~12,000-unit neural mass in 20 populations with neuromodulated
+  gain, episodic memory recalled by similarity, Rescorla-Wagner conditioning,
+  and an interoceptive prediction model with learned precision.
+* **Coupling:** the inner world changes skin blood flow, sweat and itch; affect
+  (a threat tone, rumination, interoceptive surprise); five extra drives (ocular
+  comfort, muscle soreness, gut discomfort, mental fatigue, urge to shift);
+  behavioural desire; and two new blocks of the latent vector ("ocular" 16 and
+  "inner" 128 numbers).
+
+Each organ model has the right *qualitative* couplings (exertion recruits and
+fatigues motor units, heat opens skin beds and starts sweating, damage drives
+inflammation which sensitises skin) and is otherwise toy physiology.
+
+### 17.5 A generative behaviour space (`behavior_space.py`, `behavior_exec.py`)
+
+The 55 hand-written policies of §8 are no longer the whole repertoire.  A
+*behaviour* is now a descriptor: one choice in each of 33 factored channels
+(head, eyes, lids and blink pattern, mouth and vocalisation, torso, one of 48
+arm schemas with a +-2 step variation on each of six joints per arm, hand
+shapes, stance, style, duration, object intent, self-touch on 16 regions,
+walking, ...).  Per arm there are hundreds of thousands of configurations and
+the full descriptor space is on the order of 10^37.  That counts *describable*
+descriptors, not distinct meaningful behaviours.  Every descriptor compiles to
+something the body can execute.
+
+* `BehaviorSelector` turns drives, affect and the state of the eyes into a
+  desire over affinity tags, samples candidates from that structured prior and
+  scores them by expected free energy with the learned forward model, with a
+  repetition penalty and a balance guard.
+* `BehaviorExecutor` runs the chosen behaviour at 50 Hz (joint targets with
+  speed/amplitude/tremor/rhythm, gaze, blink patterns, jaw, weight shift and
+  crouch, reaching, grasping and touching itself).
+* Two modes: **autonomous** (these behaviours are everything it does) and
+  **ambient** (the language-model mind is in charge of deliberate action and
+  this layer supplies involuntary behaviour on channels the mind is not using:
+  glances, shifting, blinking, a hand that goes to a dry eye).  The mind can
+  also call `express(...)`.
+
+### 17.6 Learning to use its own body (`body_learning.py`, `tools/train_body.py`)
+
+Most descriptors are harmless; some unbalance the body.  `BodySafety` is a
+logistic model over the parts of a behaviour (plus a few continuous summaries
+such as how far the arms are from rest) that predicts the chance of unbalancing
+the body.  It is fitted offline from many bodies babbling in parallel
+(`tools/train_body.py`: 8 workers, three rounds, 1,814 training behaviours;
+held-out AUC **0.777**) and keeps adapting online from each behaviour's
+outcome.  The selector adds the predicted hazard to a candidate's expected free
+energy.
+
+Evaluation (fresh copies, same budget, 24 simulated minutes each, at `base`
+complexity because the balance physics does not depend on receptor counts):
+
+| | behaviours | unsafe per 100 | falls | falls per sim-hour | distinct |
+|---|---|---|---|---|---|
+| unconstrained babbling | 463 | 45.1 | 123 | 307 | 100 % |
+| with the learned safety model | 465 | 11.8 | 35 | 87 | 99 % |
+
+Falls per hour fell by about 72 % and variety was kept, but **the person still
+falls about 87 times per simulated hour**; a model with AUC 0.78 is a useful
+filter, not a solution.  Weights are in `embodied_human/body_safety.json`; the
+report is `out/train_body_report.json`.
+
+### 17.7 Limitations of this part
+
+* **Not verified at scale:** no completed end-to-end run at `rich`/`extreme`,
+  no sensor/state/memory/speed measurements, and no `run_sim.py` regression
+  after these additions.
+* The cost is real: each simulated person needs roughly 1-1.5 GB of RAM, so on
+  a 32 GB machine with other applications open only a handful run in parallel.
+* The behaviour space is wide but each behaviour is a motion template, not a
+  discovered skill; "~10^37" counts descriptors.
+* The ocular, organ and neural-mass models are plausible toys.
+* Learned safety was evaluated only at `base`, with random babbling, not in a
+  long autonomous life.
+* **Olfaction and taste are currently degraded** by the two helper steps of
+  §18.1 (the original object-based smell and taste were removed; the new
+  sources exist only at `rich`).  Before that they were weakly grounded anyway:
+  the scene has few odorous objects.
+
+---
+
+## 18. The OpenRouter planner + Pi coder loop (`tools/openrouter_helper/`)
+
+A bash helper that keeps proposing the next step on this project, has a coding
+agent implement it, checks the result and undoes it if it broke the person.
+Full details are in `tools/openrouter_helper/README.md`; in short:
+
+```bash
+bash tools/openrouter_helper/helper.sh run     # plan -> Pi codes it -> verify -> rollback on FAIL -> repeat
+bash tools/openrouter_helper/helper.sh stop    # from another terminal
+bash tools/openrouter_helper/helper.sh status
+```
+
+* **Planner.**  Reads the newest `out/*.npz` and JSON files, the complexity
+  table, a generated outline of the real class/function signatures, git state,
+  earlier outcomes, and how many simulations the machine can run in parallel
+  now.  It asks a free OpenRouter model for one next step and writes
+  `state/next_task.md`.
+* **Gateway** (`proxy.py`, 127.0.0.1 only).  Everything goes through it: models
+  in a fixed order (`inkling-small`, `nemotron-3-super`, `laguna-s-2.1`,
+  `nemotron-3-ultra`, `ling-3.1-flash`), 200 requests per model per UTC day, 20
+  per minute, 1000 per day, persisted across restarts.  It passes tool calls
+  through and streams replies, so an agent can use it.  Live probe:
+  `ling-3.1-flash` is no longer free (skipped), `inkling-small` is served only to
+  coding agents (Pi identifies itself honestly and is accepted),
+  `nemotron-3-ultra` is intermittently overloaded.
+* **Coder.**  [Pi](https://pi.dev) runs with an isolated config directory, only
+  the gateway as its model, **no API key in its environment**, a tool-call
+  budget, a time limit, and `pi_agent/extensions/guard.ts`, which blocks (and
+  logs to `state/pi_audit.jsonl`) `git push`, package installs, recursive
+  deletes, system/security changes, data-sending web requests, secrets, and
+  writes outside the project or into the helper.  The guard matches commands by
+  pattern: it is a tripwire, **not a sandbox**.
+* **Verify.**  A snapshot is taken before each plan.  After the coder: changed
+  files must compile, the package must import at `base` and `rich`, a 20 s smoke
+  simulation must run without NaN or a fall and not be >25 % slower, and the
+  helper and key must be untouched.  On FAIL the files are rolled back.  Tests
+  (all offline, on throwaway copies): `tests/test_gateway.py`,
+  `test_safety_net.py`, `test_run_loop.py`, `test_pi_coder.py`.
+
+**What verify does not check.**  It checks that the simulation still runs, not
+that the step's acceptance criteria were met.  So a step can be "accepted" while
+doing its job badly.  The first live step (below) shows exactly that.
+
+### 18.1 Outcome of the first two live steps (2026-10-07)
+
+The loop ran twice and then was stopped on purpose so the README could be
+written.  Both steps were **accepted by verify** (smoke run 1.87 ms/step after
+step 1 and 1.74 ms/step after step 2, no fall, no NaN, imports at `base` and
+`rich`).  Both worked on the same area, olfaction and taste (constant zero in the
+run files), using `inkling-small` through Pi (about 67 and 59 gateway requests,
+about 5 and 6 minutes).  The guard blocked nothing: no step tried a forbidden
+command.
+
+**Step 1** (task: make smell and taste vary with internal state and breathing,
+behind a complexity flag, with a validation script).  Pi added
+`World.get_odorant_concentration` / `get_tastant_concentration` returning a
+constant 0.02 above z = 0.1 m and a constant 0.01 in a small box at a fixed
+point, overwrote the receptor output with them, and added small appraisal and
+hunger/thirst nudges plus unused variables and duplicated code in `agent.py`.
+Nothing depends on hunger, blood chemistry or breathing; no flag, no
+`tools/validate_olfgust.py`, no correlation with internal variables.
+
+**Step 2** (task: stimulus sources coupled to body position).  Pi added
+`embodied_human/stimuli.py` (an odour source at (1, 0, 0.5) and a taste source
+at (-1, 0, 0.5), concentration ~ 1/distance), a `stimuli` flag in `complexity.py`,
+`World.get_odorant_at` / `get_tastant_at`, two small visible spheres in the scene
+when the flag is on, and **rewrote `ChemoSystem.sense`**.
+
+What is wrong with the result (read from the diff and the code; not all of it
+was run):
+
+* **A regression at every level.**  The original smell of scene objects
+  (distance falloff, receptor adaptation, a novelty signal) and taste when the
+  tongue touches an object were **deleted** from `ChemoSystem.sense`; it now only
+  reads the two fixed sources.  With no sources (every level except `rich`) the
+  olfactory and gustatory channels are exactly zero, so objects in the scene
+  no longer smell or taste of anything.
+* **The flag is on only for `rich`.**  The default level (`extreme`) and `max`
+  have `stimuli=False`, so at the default level the senses are zero again.
+* **Two overlapping implementations** from steps 1 and 2 (the constant boxes
+  and the 1/distance sources) are both still in the code, plus leftover unused
+  variables.
+* The channels still do not depend on hunger, blood chemistry or breathing,
+  which was the actual goal.  Pi's own measurement was a standard deviation of
+  ~0.003 over near-body points at `rich`.
+* The README section Pi wrote said "inversely proportional to squared
+  distance"; the code is 1/distance.  It was removed from this file.
+
+Verdict: **accepted by the safety net, not acceptable as work.**  Verify cannot
+see this kind of damage because the smoke run never touches smell or taste.
+`git log` shows the changes as `autosave:` commits from about 08:28 to 08:41 on
+2026-10-07; `git diff 9bdca1b HEAD -- embodied_human` is both steps together
+(9bdca1b is the last commit before step 1).  Recommended: revert both and ask the
+planner for a smaller task, or fix `ChemoSystem.sense` by hand.  Nothing has
+been reverted; that is the owner's call.
+
+Known helper bug: `state/history.jsonl` records the step title as "?" (the
+title is read with a path Windows Python cannot open).  Not fixed yet because the
+script was running.
+
+### 18.2 Things to know before leaving it running
+
+* It spends the free daily quota on its own; one coder step costs tens of
+  requests, so expect on the order of 10-30 steps a day.
+* Free models write weaker code than a careful author would; review what it
+  changes.  `state/history.jsonl` lists each step and its verdict;
+  `state/pi_audit.jsonl` lists every tool call.
+* The OpenRouter key was pasted into a chat to set this up; rotate it.
