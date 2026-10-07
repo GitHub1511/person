@@ -237,6 +237,7 @@ class BehaviorExecutor:
         self.run_fell = False
         self.outcomes: list[tuple] = []   # (descriptor, unsafe, max_com_off, duration, fell)
         self._recent: list[np.ndarray] = []
+        self.max_hold = None              # cap on a behaviour's duration (babbling uses 3 s)
         self.unsafe_off = 0.10            # m of centre-of-mass excursion that counts as unsafe
 
     # ------------------------------------------------------------------
@@ -379,7 +380,7 @@ class BehaviorExecutor:
         self.current = b
         self.cur_desc = b.desc.copy()
         self.t_start = now
-        self.t_next = now + b.hold
+        self.t_next = now + (min(b.hold, self.max_hold) if self.max_hold else b.hold)
         self._skill_started = False
         self._vocal_t = 0.0
         self.stats.add(b)

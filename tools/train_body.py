@@ -73,6 +73,7 @@ def babble(job: dict) -> dict:
         ag.autonomous = (mode == "auto")
         ex = ag.behavior
         ex.learn_online = False
+        ex.max_hold = 3.0 if job.get("short", True) else None
         if mode_safe:
             ex.safety.load(MODEL_PATH)
             ex.safety_weight = 5.0
