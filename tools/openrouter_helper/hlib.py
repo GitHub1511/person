@@ -181,7 +181,7 @@ def project_map() -> str:
     d = ROOT / "embodied_human"
     for f in sorted(d.glob("*.py")):
         try:
-            txt = f.read_text(encoding="utf-8", errors="replace")
+            txt = f.read_text(encoding="utf-8-sig", errors="replace")
         except OSError:
             continue
         m = re.search(r'"""(.*?)"""', txt, re.S)
@@ -197,7 +197,7 @@ def api_outline(per_module: int = 70, total: int = 24000) -> str:
     out = []
     for f in sorted((ROOT / "embodied_human").glob("*.py")):
         try:
-            tree = ast.parse(f.read_text(encoding="utf-8", errors="replace"))
+            tree = ast.parse(f.read_text(encoding="utf-8-sig", errors="replace"))
         except SyntaxError:
             out.append(f"{f.name}: (does not parse)"); continue
         lines = []
