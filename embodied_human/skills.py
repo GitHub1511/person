@@ -1695,16 +1695,17 @@ class SkillSystem:
                     "knee_l": knee, "knee_r": knee,
                     "ankle_l_flex": 0.30, "ankle_r_flex": 0.30})
             yield
-        if self._rec_com() > 0.30 or peak > 0.30:
-            self._rec_caught = bool(tucked) and peak > 0.30
+        tail_com = self._rec_com()
+        self._rec_caught = bool(tucked) and (peak > 0.30 or tail_com > 0.22)
+        if tail_com > 0.30 or peak > 0.30:
             self.events.append("stand_up: cobra up")
             return
-        if peak > 0.24:
+        if peak > 0.24 or tail_com > 0.22:
             self.events.append(
-                f"stand_up: cobra rocking (peak {peak:.2f} m), continuing")
+                f"stand_up: low kneel (COM {tail_com:.2f} m), kneeling up")
             return
         raise ActionFailed(f"stand_up: cobra made no progress "
-                           f"(COM {self._rec_com():.2f} m, peak {peak:.2f} m)")
+                           f"(COM {tail_com:.2f} m, peak {peak:.2f} m)")
 
     def _rec_situp(self):
         """From supine: plant the feet, crunch up to sitting with the strong
