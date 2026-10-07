@@ -2,6 +2,7 @@
 *.pyc
 out/
 out_smoke/
+out_*/
 *.gguf
 *.safetensors
 .claude/

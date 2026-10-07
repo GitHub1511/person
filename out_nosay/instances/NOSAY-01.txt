@@ -1,7 +1,0 @@
-=== INSTANCE NOSAY-01 ===
-started_utc: 2026-10-07T17:49:22Z
-seed: 7
-backend: SCRIPTED STAND-IN (no language model loaded)
----
-[2026-10-07T17:49:52Z t=7.1s] THOUGHT: I am curious about the apple. I want to feel it.
-[2026-10-07T17:49:52Z t=7.1s] ACTION: grab('apple') | latency 0.3s
