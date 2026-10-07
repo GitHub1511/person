@@ -71,7 +71,7 @@ def seconds_to_midnight() -> int:
 
 class Usage:
     def __init__(self):
-        self.d = {"date": today(), "counts": {}, "total": 0, "skipped": {}, "consec_fail": {},
+        self.d = {"date": today(), "counts": {}, "total": 0, "skipped": {}, "gated": {}, "consec_fail": {},
                   "max_tokens_ok": {}, "ladder_idx": {}}
         if USAGE.exists():
             try:
@@ -91,18 +91,22 @@ class Usage:
         t = today()
         if self.d.get("date") != t:
             keep = {k: self.d[k] for k in ("max_tokens_ok", "ladder_idx") if k in self.d}
-            self.d.update({"date": t, "counts": {}, "total": 0, "skipped": {}, "consec_fail": {}})
+            self.d.update({"date": t, "counts": {}, "total": 0, "skipped": {}, "gated": {}, "consec_fail": {}})
             self.d.update(keep)
             self.save()
 
     # ---- model selection ---------------------------------------------------------------
-    def current(self) -> dict | None:
+    def current(self, harness: bool = False) -> dict | None:
+        """The model to use next.  Models that only answer listed coding agents are passed over
+        for ordinary callers (the planner) and used for requests that carry a harness identity."""
         self.rollover()
         if self.d["total"] >= DAILY:
             return None
         for m in MODELS:
             mid = m["id"]
             if mid in self.d["skipped"]:
+                continue
+            if mid in self.d.get("gated", {}) and not harness:
                 continue
             if self.d["counts"].get(mid, 0) < QUOTA:
                 return m
@@ -160,7 +164,7 @@ class UpstreamError(Exception):
         self.status, self.body, self.retry_after = status, body, retry_after
 
 
-def call_upstream(model: str, messages: list, max_tokens: int, extra: dict) -> dict:
+def call_upstream(model: str, messages: list, max_tokens: int, extra: dict, ident: dict | None = None) -> dict:
     """One streamed request to OpenRouter; returns an assembled chat.completion dict."""
     key = os.environ.get("OPENROUTER_API_KEY", "")
     payload = {"model": model, "messages": messages, "max_tokens": max_tokens, "stream": True}
@@ -169,7 +173,10 @@ def call_upstream(model: str, messages: list, max_tokens: int, extra: dict) -> d
             payload[k] = extra[k]
     req = urllib.request.Request(UPSTREAM, data=json.dumps(payload).encode(), method="POST", headers={
         "Authorization": f"Bearer {key}", "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost/person-helper", "X-Title": "person-sim helper"})
+        # the identity of whoever is really asking is passed through unchanged; we never claim
+        # to be a harness we are not
+        "HTTP-Referer": (ident or {}).get("HTTP-Referer", "http://localhost/person-helper"),
+        "X-Title": (ident or {}).get("X-Title", "person-sim helper")})
     text, reasoning, usage, finish, mid = [], [], {}, None, model
     try:
         resp = urllib.request.urlopen(req, timeout=READ_TIMEOUT)
@@ -217,14 +224,15 @@ def call_upstream(model: str, messages: list, max_tokens: int, extra: dict) -> d
             "usage": usage, "x_reasoning_chars": sum(len(r) for r in reasoning)}
 
 
-def handle_chat(body: dict) -> tuple[int, dict]:
+def handle_chat(body: dict, ident: dict | None = None) -> tuple[int, dict]:
+    harness = bool(ident)
     messages = body.get("messages") or []
     if not messages:
         return 400, {"error": {"message": "no messages"}}
     with LOCK:                                    # one request at a time, in order
         attempts = 0
         while attempts < MAX_ATTEMPTS:
-            m = U.current()
+            m = U.current(harness)
             if m is None:
                 return 429, {"error": {"message": "daily quota exhausted for every model",
                                        "code": "quota_exhausted", "retry_after": seconds_to_midnight()}}
@@ -237,7 +245,7 @@ def handle_chat(body: dict) -> tuple[int, dict]:
             U.count(mid)                          # every attempt counts, conservatively
             attempts += 1
             try:
-                out = call_upstream(mid, messages, mt, body)
+                out = call_upstream(mid, messages, mt, body, ident)
                 U.d["consec_fail"][mid] = 0
                 U.save()
                 content = out["choices"][0]["message"]["content"]
@@ -257,6 +265,14 @@ def handle_chat(body: dict) -> tuple[int, dict]:
                 if e.status == 400 and any(w in body_l for w in ("max_tokens", "maximum", "context", "too large", "output")):
                     if U.step_down(m):
                         continue
+                if e.status == 403 and "agentic harness" in body_l:
+                    # a provider rule, not ours to get around: only a listed coding agent may use it
+                    if harness:
+                        U.d["skipped"][mid] = "403: refused even with the caller's harness identity"
+                    else:
+                        U.d.setdefault("gated", {})[mid] = "403: only available on agentic harnesses"
+                    U.save()
+                    continue
                 if e.status in (401, 402, 403):
                     return e.status, {"error": {"message": f"upstream refused ({e.status}); check the key / credits",
                                                 "detail": (e.body or "")[:200]}}
@@ -310,7 +326,8 @@ class H(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(n))
         except ValueError:
             return self._send(400, {"error": {"message": "bad json"}})
-        code, obj = handle_chat(body)
+        ident = {k: self.headers[k] for k in ("HTTP-Referer", "X-Title") if self.headers.get(k)}
+        code, obj = handle_chat(body, ident or None)
         self._send(code, obj)
 
 
