@@ -1820,20 +1820,20 @@ class SkillSystem:
                     if table_ok:
                         self._rec_caught = True
             if self._rec_lunged:
-                # Landed a lunge at the rock peak: front quad presses straight
-                # to standing (strongest motion available: 200 Nm knee).
-                # Coordinate whole body: extend front knee, extend hips, arch spine,
-                # press hands - all together for max vertical force.
+                # Landed a lunge at the rock peak: full push-up press
+                # combining cobra arch, hip extension, and front knee drive.
                 F = "l" if self._recover_attempts % 2 == 0 else "r"
+                B = "r" if F == "l" else "l"
                 yield from self._rec_hold(
-                    {f"knee_{F}": 0.10, f"hip_{F}_flex": -0.05,
-                     f"hip_{'r' if F=='l' else 'l'}_flex": -0.05,
-                     "spine_bend": -0.10, "chest_bend": -0.05,
-                     "sh_l_flex": 0.20, "sh_r_flex": 0.20,
-                     "elbow_l": -0.30, "elbow_r": -0.30},
-                    10.0, lambda: self._rec_com() > 0.65, "lunge-press")
+                    {f"knee_{F}": 0.08, f"hip_{F}_flex": -0.02,
+                     f"hip_{B}_flex": -0.02, f"knee_{B}": 0.10,
+                     "spine_bend": -0.35, "chest_bend": -0.15,
+                     "sh_l_flex": 0.25, "sh_r_flex": 0.25,
+                     "elbow_l": -0.20, "elbow_r": -0.20},
+                    20.0, lambda: self._rec_com() > 0.70, "lunge-press")
                 self._rec_pressed = True
                 self.events.append("stand_up: pressed up from lunge")
+            elif table_ok:
             elif table_ok:
                 self._rec_caught = True
                 self.events.append("stand_up: table climb worked, kneeling")
