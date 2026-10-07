@@ -1648,6 +1648,32 @@ class SkillSystem:
             self.recovery_targets = {}
 
     # ---- recovery helpers (closed loop on the live body) -----------------
+    def _rec_cobra(self):
+        ag = self.agent
+        t0 = ag.t
+        while ag.t - t0 < 9.0:
+            if self._rec_com() > 0.30:
+                self.events.append("stand_up: cobra up")
+                return
+            u = min((ag.t - t0) / 8.0, 1.0)
+            push = max(0.0, float(np.sin(2 * np.pi * 0.6 * (ag.t - t0))))
+            arch = -0.05 - 0.27 * push
+            knee = 0.15 + 1.65 * u
+            hip = 0.15 - 1.05 * u
+            self._rec_set({
+                "spine_bend": arch, "chest_bend": 0.7 * arch,
+                "elbow_l": -0.05, "elbow_r": -0.05,
+                "sh_l_flex": 0.10, "sh_r_flex": 0.10,
+                "hip_l_flex": hip, "hip_r_flex": hip,
+                "knee_l": knee, "knee_r": knee,
+                "ankle_l_flex": 0.30, "ankle_r_flex": 0.30})
+            yield
+        if self._rec_com() > 0.24:
+            self.events.append("stand_up: cobra partial, continuing")
+            return
+        raise ActionFailed(f"stand_up: cobra made no progress "
+                           f"(COM {self._rec_com():.2f} m)")
+
     def _rec_situp(self):
         """From supine: plant the feet, crunch up to sitting with the strong
         hip flexors, then the normal kneel stages take over."""
