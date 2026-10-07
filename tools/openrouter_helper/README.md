@@ -68,7 +68,7 @@ waiting for a coder you start yourself; `helper.sh coder` runs just that step on
 | config | an isolated agent directory (`state/pi_home`), so your own `~/.pi` and its logins are untouched |
 | tools | `read bash edit write grep find ls`; no MCP, skills, themes, context files or project-local extensions |
 | limits | `CODER_TIMEOUT` (default 3600 s), `PI_MAX_TOOL_CALLS` (default 400) |
-| guard | `pi_agent/extensions/guard.ts` blocks, and logs to `state/pi_audit.jsonl`: `git push/remote/credentials`, `gh`, recursive deletes, system/security settings, package installs, web requests that *send* data (plain GET is fine), `ssh/nc/scp…`, `sudo`, reading `.env` / `auth.json` / `.ssh`, writing outside the project or into `tools/openrouter_helper/` / `.git`, and the loop's own `run/stop/rollback` commands |
+| guard | `pi_agent/extensions/guard.ts` blocks, and logs to `state/pi_audit.jsonl`: `git push/remote/credentials` **and** history/tree surgery (`reset/clean/checkout/restore/stash`), `gh`, recursive deletes, system/security settings, package installs, web requests that *send* data (plain GET is fine), `ssh/nc/scp…`, `sudo`, reading `.env` / `auth.json` / `.ssh`, scripted file writes via `python/perl/node -c` (use the file tools so paths are checked), `cd`-plus-redirect tricks, writes outside the allow-list (`embodied_human/`, `tools/` except the helper, root `run_*.py`/`diag_*.py`/`README.md`), writes into `tools/openrouter_helper/` / `.git` / `.env` / `orchestrator/` / `AI_LOG.txt`, unknown tool names, and the loop's own `run/stop/rollback/snapshot/serve` (only `verify/done/status` are for the coder) |
 | net | after the coder, `verify` always runs; a failing step is rolled back |
 
 **What the guard is not:** a sandbox. It matches commands by pattern, so a determined or confused model can
@@ -78,6 +78,9 @@ run the whole thing in a container or VM.
 
 **Quota note:** every model turn of the coder is one gateway request. A step with 30 tool calls uses ~30 of
 the 200 per model, so expect on the order of 10-30 coder steps per day across the models.
+`helper.sh probe` is rate-limited but never burns quota. Fetched web pages are never redirect-followed;
+a `301/302` is reported as refused. The planner parser tolerates markdown headings (`# TITLE:`),
+bold (`**TITLE:**`), and `<think>` blocks, and drops unsafe `FILES_TO_READ` entries.
 
 ## What it deliberately does not do
 
