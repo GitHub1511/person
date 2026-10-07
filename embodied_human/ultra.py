@@ -176,6 +176,7 @@ BUS_DOC = {
     "world.luminance": "float 0..1", "world.ambient_temp": "deg C",
     "world.humidity": "0..1", "world.airflow": "m/s",
     "behavior.name": "str, name of the behaviour being executed (may be '')",
+    "world.objects": "list of dicts {name, pos(3), odor(24) or None, taste(5) or None, temp} for every scene object",
 }
 
 #: The behaviour tags a ``desire.<tag>`` output can address.
@@ -254,6 +255,14 @@ def publish_bus(ag, bus: Bus) -> None:
     g("world.humidity", float(ag.ambient_humidity))
     g("world.airflow", float(ag.ambient_airflow))
     g("behavior.name", "")
+    objs = []
+    for o in getattr(ag.meta, "objects", []):
+        a = ag.meta.object_qpos_addr.get(o.name)
+        if a is None:
+            continue
+        objs.append({"name": o.name, "pos": np.array(ag.data.qpos[a:a + 3]), "odor": o.odor,
+                     "taste": o.taste, "temp": float(getattr(o, "temperature", 22.0))})
+    g("world.objects", objs)
 
 
 # ==========================================================================
@@ -489,6 +498,12 @@ class SyntheticBus(Bus):
             "body.tau": np.zeros(52), "body.q": np.zeros(94), "body.qd": np.zeros(88),
             "world.luminance": 0.7, "world.ambient_temp": 22.0, "world.humidity": 0.45,
             "world.airflow": 0.05, "behavior.name": "",
+            "world.objects": [
+                {"name": "apple", "pos": np.array([0.3, -0.6, 0.8]), "odor": r.random(24), "taste": r.random(5), "temp": 21.0},
+                {"name": "mug", "pos": np.array([-0.2, -0.7, 0.8]), "odor": r.random(24), "taste": None, "temp": 45.0},
+                {"name": "ball", "pos": np.array([1.0, -1.5, 0.1]), "odor": None, "taste": None, "temp": 22.0},
+                {"name": "stone", "pos": np.array([-1.2, -0.4, 0.1]), "odor": None, "taste": None, "temp": 18.0},
+            ],
         })
         for k in ("clock_hour", "sleep_pressure", "cortisol", "glucose", "threat_tone", "rumination",
                   "mind_wandering", "familiarity", "memory_valence", "muscle_fatigue",
