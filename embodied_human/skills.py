@@ -1841,7 +1841,7 @@ class SkillSystem:
         t0 = ag.t
         last_flip = ag.t
         best = self._rec_chest_face_z()
-        while ag.t - t0 < 16.0:
+        while ag.t - t0 < 12.0:
             if self._rec_chest_face_z() < -0.50 or self._rec_com() > 0.35:
                 self.events.append("stand_up: rolled prone")
                 return

@@ -58,7 +58,7 @@ def trial(tip: str, auto: bool) -> dict:
         ag.skills.api_stand_up()
     t0 = ag.t
     bals = []
-    while ag.t - t0 < 30.0:
+    while ag.t - t0 < 45.0:
         ag.step()
         bals.append(ag.motor.balance_error)
     st = ag.state
