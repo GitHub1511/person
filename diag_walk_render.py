@@ -53,7 +53,7 @@ def snap(tag):
 snap("prone ")
 sk.recovery_active = True
 sk._rec_hold_table = True
-sk.recovery_targets = {"elbow_l": -1.3, "elbow_r": -1.3,
+sk.recovery_targets = {"elbow_l": -0.10, "elbow_r": -0.10,
                        "knee_l": 0.1, "knee_r": 0.1,
                        "hip_l_flex": -0.05, "hip_r_flex": -0.05,
                        "ankle_l_flex": 0.4, "ankle_r_flex": 0.4,
