@@ -2278,7 +2278,7 @@ class SkillSystem:
             if sk._rec_furniture_gap() <= 0.55:
                 return
             # Check if went under table (safety)
-            if sk._rec_furniture_gap() <= 0.40:
+            if sk._rec_furniture_gap() <= 0.50:
                 return
             # Plant hands firmly
             for s in "lr":
@@ -2293,7 +2293,7 @@ class SkillSystem:
             # Hold the pull
             t2 = ag.t
             while ag.t - t2 < 0.8:
-                if sk._rec_furniture_gap() <= 0.40:
+                if sk._rec_furniture_gap() <= 0.50:
                     return
                 yield
             # Return hands forward for next pull
@@ -2305,10 +2305,10 @@ class SkillSystem:
                 sk._rec_servo_hand(s, target)
             t2 = ag.t
             while ag.t - t2 < 0.5:
-                if sk._rec_furniture_gap() <= 0.40:
+                if sk._rec_furniture_gap() <= 0.50:
                     return
                 yield
-            if sk._rec_furniture_gap() <= 0.40:
+            if sk._rec_furniture_gap() <= 0.50:
                 return
         # Final safety: if still not at table, return anyway
         return
