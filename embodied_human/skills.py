@@ -740,7 +740,15 @@ class SkillSystem:
     def cancel_all(self) -> None:
         with self._lock:
             self.queue.clear()
+            cur = self.current
             self.current = None
+            if cur is not None:
+                # Close the generator so try/finally blocks inside actions
+                # (e.g. stand_up cleanup) actually run on cancel.
+                try:
+                    cur[2].close()
+                except Exception:
+                    pass
             self._abort_motion()
             for s in "lr":
                 if self.held[s] is None:
@@ -1605,7 +1613,6 @@ class SkillSystem:
             table_ok = yield from self._rec_table_assist()
             if not table_ok:
                 yield from self._rec_extract()
-                table_ok = False
             if table_ok:
                 self._rec_caught = True
                 self.events.append("stand_up: table climb worked, kneeling")

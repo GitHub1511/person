@@ -1,0 +1,5 @@
+=== INSTANCE AZRTEST-01 ===
+started_utc: 2026-10-07T17:50:17Z
+seed: 7
+backend: AZR via http://127.0.0.1:1234/v1 (absolute_zero_reasoner-coder-3b)
+---
