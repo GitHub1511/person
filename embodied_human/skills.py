@@ -511,9 +511,13 @@ class SkillSystem:
                                                slope=1.2, kind="voice")
             except Exception:
                 pass
+            try:
+                base = float(ag.receptors.cochlea.level.mean())
+            except Exception:
+                base = 0.0
             self._pending_voice.append(dict(raw=text, utt=u, spk=spk, dist=dist,
                                             amp=amp, t_ready=ag.t + delay,
-                                            dur=u.duration))
+                                            dur=u.duration, base=base))
         except Exception:
             # Hearing must never break the sim: if anything above fails, the
             # utterance is simply not heard (silence is always valid data).
