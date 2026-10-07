@@ -755,40 +755,52 @@ class Mind:
 
     # ------------------------------------------------------------------
     def _apply(self, reply: ParsedReply) -> None:
+        # Every call passes through the AZR control loop (assess -> execute):
+        # reasoning proposes, the gate checks physics preconditions, and only
+        # surviving calls reach the body controllers. See azr_loop.py.
+        from .azr_loop import assess, snapshot
         sk = self.agent.skills
-        st = getattr(self.agent, "state", None)
-        bal = float(getattr(getattr(self.agent, "motor", None),
-                            "balance_error", 0.0) or 0.0)
-        fallen = bool(st is not None and st.fallen)
         loco_done = False
+        self._last_before = snapshot(self.agent)
+        self._last_names: list[str] = []
         for name, args, kwargs in reply.calls:
             target = ALLOWED_CALLS.get(name)
             if target is None:
                 continue
-            if fallen and target in ("walk_to", "walk", "turn", "grab",
-                                     "reach", "put_down", "crouch"):
-                sk.events.append(f"FAILED {name}: I am on the floor, cannot move")
+            gate = assess(self.agent, target, tuple(args), dict(kwargs),
+                          loco_done)
+            if gate["verdict"] == "deny":
+                sk.events.append(f"FAILED {name}: {gate['reason'].split(': ', 1)[-1]}")
                 continue
-            if target in ("walk_to", "walk", "turn", "face", "grab",
+            calls = gate["calls"] if gate["verdict"] == "rewrite" else [(target, args, kwargs)]
+            if gate["verdict"] == "rewrite" and gate.get("reason"):
+                sk.events.append(f"(rewrote {name}: {gate['reason']})")
+            for t2, a2, k2 in calls:
+                if t2 in ("walk_to", "walk", "turn", "face", "grab",
                           "put_down", "reach"):
-                if loco_done:
-                    sk.events.append(
-                        f"(skipped {name}: one move per turn; reconsider next thought)")
+                    if loco_done:
+                        sk.events.append(
+                            f"(skipped {name}: one move per turn; reconsider next thought)")
+                        continue
+                    loco_done = True
+                fn = getattr(sk, "api_" + t2, None)
+                if fn is None:
                     continue
-                loco_done = True
-            if bal > 0.06 and target in ("walk_to", "walk", "grab", "reach"):
-                # Unstable: stop first so the next think sees a calm body.
+                self._last_names.append(t2)
                 try:
-                    sk.api_stop()
-                except Exception:
-                    pass
-                sk.events.append(
-                    f"FAILED {name}: off balance ({bal:.3f m}), stood still instead")
-                continue
-            fn = getattr(sk, "api_" + target)
-            try:
-                fn(*args, **kwargs)
-            except Exception as exc:
-                sk.events.append(f"FAILED {name}: {exc}")
+                    fn(*a2, **k2)
+                except Exception as exc:
+                    sk.events.append(f"FAILED {name}: {exc}")
         for err in reply.errors:
             sk.events.append(f"(your answer had a problem: {err})")
+
+    def verify_last(self) -> str:
+        """Compare body snapshots around the last dispatch; record outcome."""
+        from .azr_loop import snapshot, verify_outcome
+        before = getattr(self, "_last_before", None)
+        names = getattr(self, "_last_names", []) or ["idle"]
+        after = snapshot(self.agent)
+        line = verify_outcome(before, after, "+".join(names))
+        self.memory.append("verified outcome: " + line[:180])
+        self.memory = self.memory[-24:]
+        return line
