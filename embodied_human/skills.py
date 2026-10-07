@@ -506,6 +506,16 @@ class SkillSystem:
             delay = dist / SPEED_OF_SOUND
             amp = float(level) * VOICE_BASE_AMP
             try:
+                tick = 1.0 / float(ag.cfg.rates.receptor)
+            except Exception:
+                tick = 0.01
+            # The ears need time AND transducer ticks: the cochlea only sees
+            # the event when its own sense() runs, so delivery waits for the
+            # conduction delay plus a few receptor ticks.  Without this the
+            # level snapshot at delivery predates the event and every utterance
+            # measures as inaudible.
+            t_ready = ag.t + delay + 2.5 * tick
+            try:
                 ag.receptors.cochlea.add_event(spk, amp, ag.t + delay,
                                                dur=u.duration + 0.3,
                                                slope=1.2, kind="voice")
@@ -522,7 +532,7 @@ class SkillSystem:
             except Exception:
                 base, m0 = 0.0, 0.0
             self._pending_voice.append(dict(raw=text, utt=u, spk=spk, dist=dist,
-                                            amp=amp, t_ready=ag.t + delay,
+                                            amp=amp, t_ready=t_ready,
                                             dur=u.duration, base=base, m0=m0))
         except Exception:
             # Hearing must never break the sim: if anything above fails, the
