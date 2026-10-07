@@ -13,6 +13,9 @@ subcommand prints plain text or JSON and uses its exit status.
     attach-web                      fetch the pages the plan asked for and append them to next_task.md
     fetch URL...                    read pages as text (public http/https only)
     record TITLE RESULT [NOTE]      append to state/history.jsonl
+    goal-set TEXT [--max-cycles N]  set the standing user goal the loop builds towards
+    goal-clear / goal-status        clear the goal / print goal + progress
+    goal-tick                       count one finished cycle (writes STOP at the limit)
 
 Nothing here talks to the network except ``plan-request`` asking the local proxy which model is
 current.  Nothing here edits project source; ``rollback`` only restores what ``snapshot`` saved.
@@ -289,12 +292,90 @@ def history_text(n: int = 10) -> str:
                      + (f": {r['note']}" if r.get("note") else "") for r in rows)
 
 
+def goal_text() -> str:
+    """The user's standing goal prompt, or '' if none was set."""
+    for name in ("user_goal.md", "goal.md"):
+        f = STATE / name
+        if f.exists():
+            try:
+                return f.read_text(encoding="utf-8", errors="replace").strip()
+            except OSError:
+                return ""
+    return ""
+
+
+def goal_meta() -> dict:
+    f = STATE / "goal.json"
+    if not f.exists():
+        return {}
+    try:
+        d = json.loads(f.read_text(encoding="utf-8", errors="replace"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def set_goal(text: str, max_cycles: int = 10) -> dict:
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("empty goal")
+    if len(text) > 8000:
+        text = text[:8000]
+    max_cycles = max(1, min(int(max_cycles), 200))
+    meta = {"goal": text[:500], "max_cycles": max_cycles,
+            "cycles_done": 0, "created": time.strftime("%Y-%m-%d %H:%M"),
+            "created_ts": time.time(), "status": "active"}
+    (STATE / "user_goal.md").write_text(text, encoding="utf-8")
+    (STATE / "goal.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    # A fresh goal resumes the loop: remove any previous STOP request.
+    try:
+        (STATE / "STOP").unlink(missing_ok=True)
+    except OSError:
+        pass
+    return meta
+
+
+def clear_goal() -> None:
+    for name in ("user_goal.md", "goal.md", "goal.json"):
+        try:
+            (STATE / name).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def goal_tick() -> dict:
+    """Count one finished verify cycle towards the goal. Writes STOP when the
+    max-cycle budget is reached so the run loop exits cleanly. Returns meta."""
+    meta = goal_meta()
+    if not meta or meta.get("status") != "active":
+        return meta
+    meta["cycles_done"] = int(meta.get("cycles_done", 0)) + 1
+    if meta["cycles_done"] >= int(meta.get("max_cycles", 10)):
+        meta["status"] = "done"
+        try:
+            (STATE / "STOP").write_text("goal complete\n", encoding="utf-8")
+        except OSError:
+            pass
+    try:
+        (STATE / "goal.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+    return meta
+
+
 def context() -> str:
     res = resources()
     (STATE / "resources.json").write_text(json.dumps(res, indent=1))
     parts = ["# CURRENT STATE OF THE PROJECT\n"]
     parts.append((HERE / "prompts" / "thesis.md").read_text())
     parts.append((HERE / "prompts" / "rules.md").read_text())
+    g = goal_text()
+    if g:
+        m = goal_meta()
+        parts.append("## User goal (HIGHEST PRIORITY)\nThe human operator set this standing goal. "
+                     "Every step must build recursively towards it; prefer steps that measurably "
+                     f"advance it.\n```\n{g[:4000]}\n```\n"
+                     f"(goal cycles used: {m.get('cycles_done', 0)}/{m.get('max_cycles', '?')})")
     parts.append("## Machine right now\n" + resources_text(res))
     parts.append("## Modules (embodied_human/)\n" + project_map())
     parts.append("## Real API outline (names that exist; do not invent others)\n```\n" + api_outline() + "\n```")
@@ -350,6 +431,11 @@ def plan_request() -> int:
     for k, v in (("{{MODEL}}", info["model"]), ("{{MAX_TOKENS}}", str(info["max_tokens"])),
                  ("{{TARGET_TOKENS}}", f"{info['target_tokens']:,}")):
         sys_prompt = sys_prompt.replace(k, v)
+    g = goal_text()
+    if g:
+        ctx = (ctx + "\n\n## USER GOAL (highest priority; build recursively towards this)\n"
+               + g[:4000] + "\nChoose the single most valuable next step TOWARDS this goal. "
+               "Say in RATIONALE how the step advances it.")
     req = {"messages": [{"role": "system", "content": sys_prompt}, {"role": "user", "content": ctx}],
            "max_tokens": 16000, "temperature": 0.4}
     (STATE / "plan_req.json").write_text(json.dumps(req))
@@ -856,6 +942,21 @@ def main() -> int:
             print("==", u); print(tx[:3000])
     elif c == "record":
         return record(a[1], a[2], a[3] if len(a) > 3 else "")
+    elif c == "goal-set":
+        import argparse as _ap
+        p = _ap.ArgumentParser(prog="hlib.py goal-set")
+        p.add_argument("text", help="user goal prompt")
+        p.add_argument("--max-cycles", type=int, default=10)
+        ns = p.parse_args(a[1:])
+        meta = set_goal(ns.text, ns.max_cycles)
+        print(f"goal set ({meta['max_cycles']} cycles): {meta['goal'][:120]}")
+    elif c == "goal-clear":
+        clear_goal()
+        print("goal cleared")
+    elif c == "goal-status":
+        print(json.dumps({"goal": goal_text()[:2000], "meta": goal_meta()}, indent=1))
+    elif c == "goal-tick":
+        print(json.dumps(goal_tick(), indent=1))
     else:
         print("unknown command", c); return 2
     return 0
