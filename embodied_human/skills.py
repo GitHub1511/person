@@ -1656,8 +1656,6 @@ class SkillSystem:
                 raise ActionFailed(
                     f"still down (COM {com_z:.2f} m) after trying to stand")
             ag.gait.fallen = False  # let the stance hold take over again
-            for s in "lr":
-                self.arm[s].begin_retract()
             self._rec_hold_table = False
             self.events.append(
                 f"got back up (COM {com_z:.2f} m, attempt {self._recover_attempts})")
@@ -1665,6 +1663,11 @@ class SkillSystem:
             self.recovery_active = False
             self.recovery_targets = {}
             self._rec_hold_table = False
+            for s in "lr":
+                try:
+                    self.arm[s].stop()
+                except Exception:
+                    pass
 
     # ---- recovery helpers (closed loop on the live body) -----------------
     def _rec_table_assist(self) -> bool:
