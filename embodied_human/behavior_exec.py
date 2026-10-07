@@ -56,10 +56,10 @@ SCORED = ("head", "eyes", "lids", "mouth", "torso", "l_schema", "r_schema", "l_h
           "r_hand", "stance", "style", "intent", "touch", "walk")
 BASE_P = {"head": 0.55, "eyes": 0.65, "lids": 0.35, "mouth": 0.22, "torso": 0.35,
           "l_arm": 0.45, "r_arm": 0.45, "l_hand": 0.38, "r_hand": 0.38, "stance": 0.16,
-          "style": 0.5, "hold": 1.0, "intent": 0.12, "touch": 0.20, "walk": 0.0}
+          "style": 0.5, "hold": 1.0, "intent": 0.05, "touch": 0.07, "walk": 0.0}
 AMBIENT_P = {"head": 0.30, "eyes": 0.45, "lids": 0.40, "mouth": 0.08, "torso": 0.18,
              "l_arm": 0.12, "r_arm": 0.12, "l_hand": 0.30, "r_hand": 0.30, "stance": 0.05,
-             "style": 0.3, "hold": 1.0, "intent": 0.0, "touch": 0.10, "walk": 0.0}
+             "style": 0.3, "hold": 1.0, "intent": 0.0, "touch": 0.04, "walk": 0.0}
 # joints the behaviour layer writes (legs are the whole-body controller's)
 LEG_PREFIX = ("hip_", "knee_", "ankle_", "toe_")
 
@@ -161,6 +161,8 @@ class BehaviorSelector:
                     pv = np.array([0.25, 0.5, 0.25])
                     for j in range(3):
                         d[ci[chans[1 + j]]] = int(rng.choice(HAND_VAR, p=pv))
+            if d[ci['touch']] > 0:
+                d[ci['intent']] = 0           # one skill-driven part at a time
             if ambient:
                 # an ambient behaviour never goes for big, loud things
                 d[ci["style"]] = np.ravel_multi_index(
@@ -214,6 +216,7 @@ class BehaviorExecutor:
         self._vocal_t = 0.0
         self._stand_h0: float | None = None
         self.owns_eyes = True
+        self.guard = 1.0
         self.jaw_active = False
         self.voice = 0.0
         self.owned_joints = np.array([not n.startswith(LEG_PREFIX) and not n.startswith("eye_")
@@ -422,7 +425,7 @@ class BehaviorExecutor:
             for nm in self.names:
                 if nm.startswith(("neck_side", "spine_side", "chest_side")):
                     tgt[self.idx[nm]] += 0.05 * amp * math.sin(w * t)
-        vmax = 1.3 * b.speed * (0.7 if self.ambient else 1.0)
+        # balance guard: the closer the centre of mass is to the edge of the feet, the\n        # less the arms and trunk are allowed to throw it around\n        st = ag.state\n        guard = 1.0\n        if st is not None:\n            off = float(np.hypot(st.com_over_support[0] * 1.3, st.com_over_support[1]))\n            guard = float(np.clip(1.0 - (off - 0.035) / 0.05, 0.25, 1.0))\n        self.guard = guard\n        if guard < 0.999:\n            tgt = self.q_nom + guard * (tgt - self.q_nom)\n        vmax = 1.3 * min(b.speed, 1.8) * (0.7 if self.ambient else 1.0)
         step = np.clip(tgt - self.cmd, -vmax * dt, vmax * dt)
         self.cmd = self.cmd + step
         hands = np.array([nm.startswith(("thumb_", "index_", "fingers_")) for nm in self.names])
