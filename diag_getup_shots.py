@@ -40,16 +40,17 @@ sk = ag.skills
 sk._auto_recover_t = 1e9  # only the explicit attempt runs
 sk.api_stand_up()
 labels = ["down"]
-for i in range(6000):
+steps = [1999, 3999, 5999, 7999, 9999, 11999, 15999, 19999]
+for i in range(20000):
     ag.step()
-    if i in (999, 1999, 2999, 3999, 5999):
+    if i in steps:
         snap()
         st = ag.state
         labels.append(f"t+{(i+1)//1000}s com{st.com[2]:.2f}")
 print("fallen:", ag.state.fallen, "com_z:", round(float(ag.state.com[2]), 3))
-print("events:", ag.skills.events[-5:])
-fig, axes = plt.subplots(2, 3, figsize=(15, 8))
-for k in range(6):
+print("events:", ag.skills.events[-6:])
+fig, axes = plt.subplots(3, 3, figsize=(15, 12))
+for k in range(9):
     ax = axes[k // 3][k % 3]
     ax.imshow(shots[k])
     ax.set_title(labels[k])
