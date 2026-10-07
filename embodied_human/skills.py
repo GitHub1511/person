@@ -1659,6 +1659,69 @@ class SkillSystem:
                     pass
 
     # ---- recovery helpers (closed loop on the live body) -----------------
+    def _rec_hand_home(self, side: str) -> np.ndarray:
+        d = self.agent.data
+        return d.xpos[self.agent.meta.body_ids[f"hand_{side}"]].copy()
+
+    def _rec_hand_walk(self):
+        """Walk the hands back toward the feet until the torso is up in a
+        bent-over stance, then unroll to standing. Each planted hand is held
+        in world space by its arm servo (proven in reach/grab); the moving
+        hand steps ~8 cm toward the feet. Floor friction does the work —
+        no reach, no anchors, no timing luck."""
+        ag = self.agent
+        sk = self
+        R = ag.data.xmat[ag.meta.body_ids["chest"]].reshape(3, 3)
+        fwd = -R[:, 1]
+        fwd[2] = 0.0
+        n = float(np.linalg.norm(fwd))
+        if n < 1e-3:
+            raise ActionFailed("stand_up: no facing to walk toward")
+        back = -fwd / n  # toward the feet
+        for s in "lr":
+            h = sk.hands[s]
+            h.owned = True
+            p = sk._rec_hand_home(s).copy()
+            sk.arm[s].start(lambda p=p: (p, None), use_trunk=False, w_ori=0.0)
+        t0 = ag.t
+        step_side = "l"
+        try:
+            while ag.t - t0 < 40.0:
+                up = float(ag.data.xmat[ag.meta.body_ids["chest"]].reshape(3, 3)[2, 2])
+                if up > 0.45 and sk._rec_com() > 0.55:
+                    sk.events.append("stand_up: bent-over stance, unrolling")
+                    break
+                # plant the standing hand hard, step the other one back
+                s = step_side
+                step_side = "r" if s == "l" else "l"
+                cur = sk._rec_hand_home(s)
+                tgt = (cur + np.array([back[0], back[1], 0.0]) * 0.08).copy()
+                tgt[2] = max(tgt[2], 0.03)
+                sk.arm[s].start(lambda p=tgt: (p, None), use_trunk=False, w_ori=0.0)
+                t2 = ag.t
+                while ag.t - t2 < 2.5:
+                    if sk.arm[s].err_pos < 0.06:
+                        break
+                    yield
+                yield
+            else:
+                raise ActionFailed(f"stand_up: hands never got under (COM {sk._rec_com():.2f} m)")
+            # unroll to standing with the hands still planted
+            sk._rec_set({"knee_l": 0.10, "knee_r": 0.10,
+                         "hip_l_flex": 0.0, "hip_r_flex": 0.0,
+                         "spine_bend": 0.02, "chest_bend": 0.0,
+                         "ankle_l_flex": -0.05, "ankle_r_flex": -0.05})
+            t1 = ag.t
+            while ag.t - t1 < 5.0:
+                if not ag.state.fallen and sk._rec_com() > 0.72:
+                    break
+                yield
+        finally:
+            for s in "lr":
+                try:
+                    sk.arm[s].stop()
+                except Exception:
+                    pass
     def _rec_table_assist(self) -> bool:
         """Climb the workbench leg hand-over-hand: plant both hands low on
         the nearest corner leg, alternate reaching higher rungs while the
