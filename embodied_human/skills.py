@@ -1,4 +1,4 @@
-﻿"""
+"""
 Motor skills: everything the body can *do* on purpose.
 
 The active-inference layer in :mod:`embodied_human.active_inference` chooses
@@ -774,6 +774,24 @@ class SkillSystem:
         if name not in GESTURES:
             raise ActionFailed(f"unknown gesture '{name}' (try {', '.join(GESTURES)})")
         self._enqueue("gesture", (name,), self._a_gesture(name, hand))
+
+    def api_touch_self(self, region, hand=None, action="rest"):
+        self._enqueue("touch_self", (region, hand, action), self._a_touch_self(region, hand, action))
+
+    def api_blink(self, kind="normal"):
+        oc = getattr(self.agent, "ocular", None)
+        if oc is None:
+            return
+        if kind in ("slow",):
+            oc.blink_now(1.0, 0.45)
+        elif kind == "double":
+            oc.blink_now(1.0, 1.3); oc.blink_now(0.9, 1.3)
+        elif kind in ("wink_left", "wink"):
+            oc.wink(0, 1.0)
+        elif kind == "wink_right":
+            oc.wink(1, 1.0)
+        else:
+            oc.blink_now(1.0, 1.0)
 
     def api_crouch(self, depth=0.7):
         self._enqueue("crouch", (depth,), self._a_crouch(float(depth)))
