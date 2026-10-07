@@ -2274,10 +2274,8 @@ class SkillSystem:
                 use_trunk=False, w_ori=0.0)
         t0 = ag.t
         while ag.t - t0 < 30.0:
-            # Check if reached table front edge (body y near table front edge)
-            body_y = sk.world.body_pos()[1]
-            table_front_y = -0.52  # table front edge y = -0.82 + 0.30
-            if body_y <= table_front_y + 0.05:  # reached table edge
+            # Check if reached good position for table assist (gap ~0.55m)
+            if sk._rec_furniture_gap() <= 0.55:
                 return
             # Check if went under table (safety)
             if sk._rec_furniture_gap() <= 0.40:
