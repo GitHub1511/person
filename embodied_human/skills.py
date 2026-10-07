@@ -2273,9 +2273,9 @@ class SkillSystem:
                 lambda s=s: (sk._rec_hand_target_forward(s), None),
                 use_trunk=False, w_ori=0.0)
         t0 = ag.t
-        while ag.t - t0 < 8.0:
+        while ag.t - t0 < 30.0:
             # Check if reached table
-            if sk._rec_furniture_gap() <= 0.45:
+            if sk._rec_furniture_gap() <= 0.40:
                 return
             # Plant hands firmly
             for s in "lr":
@@ -2290,7 +2290,7 @@ class SkillSystem:
             # Hold the pull
             t2 = ag.t
             while ag.t - t2 < 0.8:
-                if sk._rec_furniture_gap() <= 0.45:
+                if sk._rec_furniture_gap() <= 0.40:
                     return
                 yield
             # Return hands forward for next pull
@@ -2302,10 +2302,10 @@ class SkillSystem:
                 sk._rec_servo_hand(s, target)
             t2 = ag.t
             while ag.t - t2 < 0.5:
-                if sk._rec_furniture_gap() <= 0.45:
+                if sk._rec_furniture_gap() <= 0.40:
                     return
                 yield
-            if sk._rec_furniture_gap() <= 0.45:
+            if sk._rec_furniture_gap() <= 0.40:
                 return
         # Final safety: if still not at table, return anyway
         return
