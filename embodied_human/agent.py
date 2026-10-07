@@ -49,7 +49,6 @@ from .motor import MotorFrame, MotorSystem
 from .predictive import PredictionFrame, PredictiveSystem
 from .receptors import ReceptorFrame, ReceptorSystem
 from .skeleton import BONES, nominal_posture
-from .world import World
 from .state import BodyState, ContactInfo
 
 HUMAN_BODY_IDS: set[int] = set()
@@ -391,9 +390,6 @@ class EmbodiedHuman:
         self._behavior_on = True
         # the internal world (organs, circadian clock, neural mass, memory ...)
         self.inner = InnerWorld(self) if COMPLEXITY.inner_world else None
-        # world emission for chemical senses
-        self.complexity = COMPLEXITY
-        self.world = World(self, complexity=self.complexity)
 
         # geom -> surface temperature, and geom -> scene-object name
         self.geom_temp = np.full(model.ngeom, 22.0, float)
@@ -562,35 +558,13 @@ class EmbodiedHuman:
             self.acc["receptor"] = 0.0
             blood = float(fclip(
                 self.interoception.s[IDX["perfusion_skin"]], 0.1, 1.8))
-            # Sample world at nose/mouth for chemical senses
-            head_pos = self.data.qpos[0:3] if len(self.data.qpos) >= 3 else np.zeros(3)
-            nose_pos = head_pos + np.array([0.1, 0.0, 0.05])
-            mouth_pos = head_pos + np.array([0.05, 0.0, -0.05])
-            # For emission testing, also check origin-adjusted mouth
-            taste_origin = self.world.get_tastant_concentration(np.array([0.0, 0.0, 0.12]))
-            odorant = self.world.get_odorant_concentration(nose_pos)
-            tastant = self.world.get_tastant_concentration(mouth_pos)
             self.frame = self.receptors.sense(
                 m, d, self.meta, state,
-                world=self.world,
-                world_nose_pos=nose_pos,
-                world_mouth_pos=np.array([0.0, 0.0, 0.12]),
                 arousal=float(self.affect.arousal), blood_flow=blood)
             self.luminance = float(fclip(self.frame.visual[0] * 1.6, 0.05, 1.0))
 
         if self.frame is None:
-            # Sample world at nose/mouth
-            head_pos = self.data.qpos[0:3] if len(self.data.qpos) >= 3 else np.zeros(3)
-            nose_pos = head_pos + np.array([0.1, 0.0, 0.05])
-            mouth_pos = head_pos + np.array([0.05, 0.0, -0.05])
-            # Emission test point near mouth origin
-            taste_origin = self.world.get_tastant_concentration(np.array([0.0, 0.0, 0.12]))
-            odorant = self.world.get_odorant_concentration(nose_pos)
-            tastant = self.world.get_tastant_concentration(mouth_pos)
             self.frame = self.receptors.sense(m, d, self.meta, state,
-                                              world=self.world,
-                                              world_nose_pos=nose_pos,
-                                              world_mouth_pos=np.array([0.0, 0.0, 0.12]),
                                               arousal=float(self.affect.arousal))
 
         # ---- 200 Hz : afferents --------------------------------------
@@ -644,19 +618,10 @@ class EmbodiedHuman:
         if self.acc["affect"] >= 1.0 / cfg.rates.affect:
             self.acc["affect"] = 0.0
             dt_aff = 1.0 / cfg.rates.affect
-            # Get nose/mouth positions for chemical coupling
-            head_pos = self.data.qpos[0:3] if len(self.data.qpos) >= 3 else np.zeros(3)
-            nose_pos = head_pos + np.array([0.1, 0.0, 0.05])
-            mouth_pos = head_pos + np.array([0.05, 0.0, -0.05])
-            taste_origin = self.world.get_tastant_concentration(np.array([0.0, 0.0, 0.12]))
-            odorant = self.world.get_odorant_concentration(nose_pos)
-            tastant = self.world.get_tastant_concentration(mouth_pos)
-            self.affect_frame = self.affect.update(dt_aff, self._affect_inputs(),
-                                                   odorant=odorant, tastant=tastant)
+            self.affect_frame = self.affect.update(dt_aff, self._affect_inputs())
             self.drive_frame = self.drives.update(
                 dt_aff, self.interoception, self.affect,
                 afferent_pain=self.frame.pain_total if self.frame else 0.0,
-                odorant=odorant, tastant=tastant,
                 afferent_itch=self.frame.itch_total if self.frame else 0.0,
                 social_contact=float(self.frame.affective_touch) * 2.0
                 if self.frame else 0.0,

@@ -32,12 +32,8 @@ def wrap(a: float) -> float:
 
 
 class World:
-    ODORANT_EMISSION = 0.02
-    TASTANT_EMISSION = 0.01
-
-    def __init__(self, agent, complexity=None):
+    def __init__(self, agent):
         self.agent = agent
-        self.complexity = complexity
         self.m = agent.model
         self.meta = agent.meta
         self.objects = {o.name: o for o in self.meta.objects}
@@ -47,23 +43,6 @@ class World:
         self.pelvis = self.meta.body_ids["pelvis"]
         self.head = self.meta.body_ids["head"]
         self.chest = self.meta.body_ids["chest"]
-        self.stimuli = None
-        self._setup_stimuli()
-
-    def _setup_stimuli(self):
-        if self.complexity is not None and getattr(self.complexity, 'stimuli', False):
-            from . import stimuli
-            self.stimuli = stimuli.default_stimuli()
-
-    def get_odorant_at(self, point) -> float:
-        if self.stimuli is not None:
-            return self.stimuli.get_odorant_at(point)
-        return 0.0
-
-    def get_tastant_at(self, point) -> float:
-        if self.stimuli is not None:
-            return self.stimuli.get_tastant_at(point)
-        return 0.0
 
     # ------------------------------------------------------------------
     @property
@@ -193,13 +172,6 @@ class World:
                         "dist": float(np.hypot(*self.to_ego(p)[:2]))})
         out.sort(key=lambda r: r["dist"])
         return out
-
-    def get_odorant_concentration(self, pos) -> float:
-        return self.ODORANT_EMISSION if pos[2] > 0.1 else 0.0
-
-    def get_tastant_concentration(self, pos) -> float:
-        return self.TASTANT_EMISSION if (abs(pos[0]) < 0.1 and abs(pos[1]) < 0.1
-                                              and 0.05 < pos[2] < 0.2) else 0.0
 
     def visible_furniture(self) -> list[dict]:
         out = []

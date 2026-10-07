@@ -1065,24 +1065,43 @@ class ChemoSystem:
         self._seen = np.zeros(self.n_olf)
         self.tongue_site = meta.landmark_site_ids.get("gaze")
 
-    def sense(self, model, data, meta, state: BodyState, world=None, nose_pos=None, mouth_pos=None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        if nose_pos is None:
-            nose_pos = state.site_pos.get("gaze", state.gaze_pos) if hasattr(state, 'site_pos') else state.gaze_pos
-        if mouth_pos is None:
-            mouth_pos = state.site_pos.get("mouth", state.gaze_pos) if hasattr(state, 'site_pos') else state.gaze_pos
-        odorant = world.get_odorant_at(nose_pos) if world is not None else 0.0
-        tastant = world.get_tastant_at(mouth_pos) if world is not None else 0.0
-        # Add external chemical signals to receptor state (world-controlled)
-        self.odor_conc[:] = odorant * np.ones(self.n_olf, dtype=np.float64)
-        taste = np.full(5, tastant, dtype=np.float64)
-        tongue_hit = 1.0 if tastant > 0.0 else 0.0
+    def sense(self, model, data, meta, state: BodyState) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        nose = state.site_pos.get("gaze", state.gaze_pos)
+        odor = np.zeros(self.n_olf)
+        taste = np.zeros(5)
+        tongue_hit = 0.0
+        for obj in self.objects:
+            jid = meta.object_qpos_addr.get(obj.name)
+            if jid is None:
+                continue
+            p = data.qpos[jid:jid + 3]
+            d = float(np.linalg.norm(nose - p))
+            if obj.odor is not None and d < self.C.olfactory_range:
+                # 1/r falloff, clipped
+                conc = np.exp(-(d / self.C.olfactory_range) ** 2 * 2.0)
+                odor += obj.odor * conc
+        # adaptation: receptors stop responding to a steady odour
+        self.odor_conc += (odor - self.odor_conc) * 0.12
+        self._seen += (self.odor_conc - self._seen) * 0.01
+        novelty = float(np.abs(self.odor_conc - self._seen).sum())
+        self.novelty += 0.1 * (novelty - self.novelty)
+
+        # gustation: tongue-object contact
+        for c in state.contacts:
+            for bid, other in ((c.body1, c.name2), (c.body2, c.name1)):
+                bname = _body_name_of(meta, bid)
+                if bname != "jaw":
+                    continue
+                for obj in self.objects:
+                    if obj.name in other and obj.taste is not None:
+                        taste = np.maximum(taste, obj.taste)
+                        tongue_hit = 1.0
         summary = np.array([
             float(self.odor_conc.sum()),
-            float(abs(odorant - self.prev_odor.sum() / max(self.n_olf, 1)) * self.n_olf),
+            self.novelty,
             float(np.dot(self.odor_conc, np.linspace(-1, 1, self.n_olf))),
             float(np.linalg.norm(state.com_vel)) * 0.1 + 0.2,
         ])
-        self.prev_odor = self.odor_conc.copy()
         return self.odor_conc.copy(), taste, summary
 
     def reset(self) -> None:
@@ -1128,9 +1147,8 @@ class ReceptorSystem:
         self.resp_rate = 13.0          # breaths per minute, for sniffing
         self.fusimotor = 0.35
 
-    def sense(self, model, data, meta, state: BodyState,
-              world=None, world_nose_pos=None, world_mouth_pos=None,
-              *, arousal: float = 0.3, blood_flow: float = 1.0) -> ReceptorFrame:
+    def sense(self, model, data, meta, state: BodyState, *,
+              arousal: float = 0.3, blood_flow: float = 1.0) -> ReceptorFrame:
         dt = 1.0 / self.cfg.rates.receptor
         self.tactile.apply_contact_temperature(state, dt)
         tact, agg = self.tactile.sense(model, data, meta, state,
@@ -1139,17 +1157,7 @@ class ReceptorSystem:
         vest = self.vestibular.sense(model, data, meta, state)
         vis = self.visual.sense(model, data, meta, state, arousal=arousal)
         aud = self.auditory.sense(model, data, meta, state)
-        # ---- olfactory / gustatory world emission -----------------------
-        nose_pos = world_nose_pos if world_nose_pos is not None else (
-            state.site_pos.get("gaze", state.gaze_pos) if hasattr(state, 'site_pos') else np.zeros(3))
-        mouth_pos = world_mouth_pos if world_mouth_pos is not None else (
-            state.site_pos.get("mouth", state.gaze_pos) if hasattr(state, 'site_pos') else np.zeros(3))
-
-        olf, gus, chemo_sum = self.chemo.sense(model, data, meta, state, world=world, nose_pos=world_nose_pos, mouth_pos=world_mouth_pos)
-        # override with world emission if present
-        if world is not None:
-            olf[:] = world.get_odorant_concentration(nose_pos) * np.ones_like(olf)
-            gus[:] = world.get_tastant_concentration(mouth_pos) * np.ones_like(gus)
+        olf, gus, chemo_sum = self.chemo.sense(model, data, meta, state)
 
         # ---- populations ------------------------------------------------------
         ext: dict[str, np.ndarray] = {}

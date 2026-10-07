@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .complexity import C as COMPLEXITY, load as load_complexity
+from .complexity import C as COMPLEXITY
 
 # --------------------------------------------------------------------------
 # Paths
@@ -324,7 +324,6 @@ class SimConfig:
     vision: VisionConfig = field(default_factory=VisionConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     chemo: ChemoConfig = field(default_factory=ChemoConfig)
-    complexity: object = field(default_factory=lambda: COMPLEXITY)
     intero: InteroceptionConfig = field(default_factory=InteroceptionConfig)
     affect: AffectConfig = field(default_factory=AffectConfig)
     predictive: PredictiveConfig = field(default_factory=PredictiveConfig)

@@ -309,7 +309,7 @@ class AffectSystem:
         self.history: list = []
 
     # ------------------------------------------------------------------
-    def update(self, dt: float, inp: AffectInputs, odorant: float = 0.0, tastant: float = 0.0) -> AffectFrame:
+    def update(self, dt: float, inp: AffectInputs) -> AffectFrame:
         CFG = self.A          # AffectConfig (the module-level A is the appraisal index)
         T = self.temperament
         neuroticism, extraversion, openness, agreeableness, conscientiousness = T
@@ -369,14 +369,6 @@ class AffectSystem:
         self.appraisal_target = raw * self.A.appraisal_gain
         # appraisal itself is a fast but not instantaneous process
         self.appraisal += (dt / 0.35) * (self.appraisal_target - self.appraisal)
-
-        # Olfactory/gustatory valence effect
-        if odorant > 0:
-            self.appraisal[0] += 0.1 * odorant
-            self.appraisal[1] -= 0.05 * odorant
-        if tastant > 0:
-            self.appraisal[0] += 0.15 * tastant
-            self.appraisal[2] += 0.1 * tastant
 
         # ---------------- 2. emotions ----------------------------------
         drive = APPRAISAL_W @ self.appraisal
