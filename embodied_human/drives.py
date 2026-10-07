@@ -31,6 +31,8 @@ DRIVES = (
     "hunger", "thirst", "sleepiness", "thermal_cold", "thermal_heat",
     "pain", "air_hunger", "nausea", "bladder", "fatigue",
     "itch", "social_need", "safety", "curiosity", "comfort", "restlessness",
+    # added with the internal world (see inner_world.EXTRA_DRIVES)
+    "ocular_comfort", "muscle_soreness", "gut_discomfort", "mental_fatigue", "shift_urge",
 )
 N_DRIVES = len(DRIVES)
 D = {n: i for i, n in enumerate(DRIVES)}
@@ -86,7 +88,7 @@ class DriveSystem:
                affect, afferent_pain: float = 0.0,
                afferent_itch: float = 0.0, social_contact: float = 0.0,
                novelty: float = 0.0, balance_error: float = 0.0,
-               fallen: float = 0.0) -> DriveFrame:
+               fallen: float = 0.0, extra: np.ndarray | None = None) -> DriveFrame:
         s = intero.s
         g = IDX
 
@@ -155,6 +157,11 @@ class DriveSystem:
         levels = np.array([hunger, thirst, sleepiness, cold, heat, pain, air,
                            nausea, bladder, fatigue, itch, social_need,
                            1.0 - self.safety, curiosity, comfort, restlessness])
+        n_extra = N_DRIVES - len(levels)
+        ex = np.zeros(n_extra) if extra is None else np.asarray(extra, float)[:n_extra]
+        if len(ex) < n_extra:
+            ex = np.concatenate([ex, np.zeros(n_extra - len(ex))])
+        levels = np.concatenate([levels, ex])
         levels = np.nan_to_num(fclip(levels, 0.0, 1.5))
 
         if not self._init:
@@ -181,6 +188,7 @@ class DriveSystem:
             self.safety, self.curiosity_satiation, s[g["thermal_discomfort"]],
             affect.arousal,
         ])
+        val = np.concatenate([val, levels[len(val):]])
 
         order = int(np.argmax(levels))
         total = float(np.sum(fclip(levels, 0, 1) ** 2)) ** 0.5
