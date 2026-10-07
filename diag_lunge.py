@@ -39,6 +39,5 @@ try:
             break
 except Exception as exc:
     print("roll raised:", exc)
-print(f"peak={peak:.3f} end={ag.state.com[2]:.3f} lunged={sk._rec_lunged} "
-      f"caught={sk._rec_caught}")
+print(f"peak={peak:.3f} end={ag.state.com[2]:.3f}")
 print([e for e in sk.events if "stand_up" in e])
