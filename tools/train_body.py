@@ -90,14 +90,14 @@ def babble(job: dict) -> dict:
 
     ex = configure(ag)
     records: list[tuple] = []
+    err = None
     total = 0.0
     falls = 0
     distinct = set()
     n_dec = 0
     chan_counts: list[dict] = []
     seen = 0
-    t_wall = time.perf_counter()
-    while total < budget:
+    t_wall = time.perf_counter()\n    try:\n      while total < budget:
         ag.step()
         # harvest finished behaviours
         if len(ex.outcomes) > seen:
