@@ -215,6 +215,12 @@ class AffectInputs:
     self_evaluation: float = 0.0
     motor_error: float = 0.0
     ocular_discomfort: float = 0.0    # dry / burning / gritty eyes (see ocular.py)
+    # from the internal world (inner_world.py)
+    inner_threat: float = 0.0         # neural-mass "amygdala" tone above baseline
+    rumination: float = 0.0           # mind-wandering that has a threatened colour
+    intero_surprise: float = 0.0      # the body is not doing what it predicted
+    memory_valence: float = 0.0       # the mood the remembered past carries
+    familiarity: float = 0.0          # how much like something remembered this is
 
 
 @dataclass
@@ -353,6 +359,12 @@ class AffectSystem:
                           + 0.55 * inp.ocular_discomfort)
         raw[A["goal_congruence"]] -= 0.45 * drive_pressure
         raw[A["urgency"]] += 0.25 * drive_pressure
+        # the internal world: a threatened inner tone, rumination, a body that
+        # surprises its own predictions, and the mood that remembered situations carry
+        raw[A["urgency"]] += 0.30 * inp.inner_threat + 0.25 * inp.intero_surprise
+        raw[A["goal_congruence"]] += 0.35 * inp.memory_valence - 0.30 * inp.rumination
+        raw[A["certainty"]] -= 0.30 * inp.intero_surprise
+        raw[A["novelty"]] *= 1.0 - 0.35 * inp.familiarity
 
         self.appraisal_target = raw * self.A.appraisal_gain
         # appraisal itself is a fast but not instantaneous process

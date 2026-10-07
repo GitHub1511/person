@@ -628,13 +628,18 @@ class EmbodiedHuman:
                 novelty=float(self.pred_frame.free_energy_norm) * 0.5
                 if self.pred_frame else 0.0,
                 balance_error=self.motor.balance_error,
-                fallen=1.0 if state.fallen else 0.0)
+                fallen=1.0 if state.fallen else 0.0,
+                extra=self.inner.out.extra_drives if self.inner is not None else None)
 
         if self.affect_frame is None:
             self.affect_frame = self.affect.update(0.0, AffectInputs())
         if self.drive_frame is None:
             self.drive_frame = self.drives.update(
                 0.0, self.interoception, self.affect)
+
+        # ---- the internal world (each part at its own rate) --------------------
+        if self.inner is not None:
+            self.inner.step(dt, self)
 
         # ---- 50 Hz : behaviour ---------------------------------------------
         self.acc.setdefault("behavior", 0.0)
@@ -804,6 +809,11 @@ class EmbodiedHuman:
             + self.skills.social_pulse,
             novelty=float(fclip(pred.free_energy_norm * 0.8, 0, 1.5)) if pred else 0.0,
             ocular_discomfort=float(self.ocular.out.discomfort),
+            inner_threat=float(self.inner.out.threat_tone) if self.inner is not None else 0.0,
+            rumination=float(self.inner.out.rumination) if self.inner is not None else 0.0,
+            intero_surprise=float(self.inner.out.interoceptive_surprise) if self.inner is not None else 0.0,
+            memory_valence=float(self.inner.out.memory_valence) if self.inner is not None else 0.0,
+            familiarity=float(self.inner.out.familiarity) if self.inner is not None else 0.0,
             control=float(fclip(0.9 - 0.6 * self.motor.balance_error
                                   - (0.4 if st and st.fallen else 0.0), 0, 1)),
             safety=float(fclip(1.0 - self.motor.balance_error * 1.2, 0, 1)),
@@ -829,9 +839,13 @@ class EmbodiedHuman:
     # ------------------------------------------------------------------
     def _cognitive_tick(self) -> None:
         """10 Hz: learn the body model, then choose what to do."""
+        inner_vec = None
+        if self.inner is not None:
+            inner_vec = self.inner.finalize(self).summary
         latent, preferred, precision = self.latent_spec.build(
             self.frame, self.aff, self.interoception, self.affect_frame,
-            self.drive_frame, self.state, self.pred_frame)
+            self.drive_frame, self.state, self.pred_frame,
+            ocular=self.ocular.summary_features(), inner=inner_vec)
         self.latent = latent
         self.preferred = preferred
         self.precision = precision
