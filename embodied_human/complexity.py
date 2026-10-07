@@ -103,7 +103,8 @@ PRESETS: dict[str, Complexity] = {
         neural_indegree=32, motor_units_per_muscle=16, alveoli=96,
         nephron_groups=96, liver_zones=48, vascular_beds=48, gut_segments=12,
         microbiome_taxa=32, analytes=240, cytokines=32, immune_populations=24,
-        circadian_oscillators=96, episodic_capacity=2048, episodic_dim=64),
+        circadian_oscillators=96, episodic_capacity=2048, episodic_dim=64,
+        stimuli=True),
     "extreme": Complexity(name="extreme"),
     "max": Complexity(
         name="max", skin_density=4.0, spindles_per_muscle=32, gto_per_muscle=16,

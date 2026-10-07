@@ -392,7 +392,8 @@ class EmbodiedHuman:
         # the internal world (organs, circadian clock, neural mass, memory ...)
         self.inner = InnerWorld(self) if COMPLEXITY.inner_world else None
         # world emission for chemical senses
-        self.world = World(self)
+        self.complexity = COMPLEXITY
+        self.world = World(self, complexity=self.complexity)
 
         # geom -> surface temperature, and geom -> scene-object name
         self.geom_temp = np.full(model.ngeom, 22.0, float)

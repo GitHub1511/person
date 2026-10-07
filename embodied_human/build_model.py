@@ -175,13 +175,13 @@ def surface_top(name: str) -> float:
     return 0.0
 
 
-def default_scene_objects() -> list[SceneObject]:
+def default_scene_objects(complexity=None) -> list[SceneObject]:
     """A small, deliberately mundane world: things a person might touch.
 
     Everything starts resting on the workbench.
     """
     top = surface_top("table")
-    return [
+    objs = [
         SceneObject(
             name="mug", kind="cylinder", pos=(0.22, -0.60, top + 0.057), size=(0.040, 0.055),
             rgba=(0.92, 0.93, 0.95, 1.0), mass=0.35, temperature=62.0,
