@@ -1660,7 +1660,7 @@ class SkillSystem:
                 return
             vel = (com - prev) / max(TICK, 1e-6)
             prev = com
-            if not tucked and com > 0.21 and vel > 0.05:
+            if not tucked and com > 0.19 and vel > 0.04:
                 tucked = True  # rocking up: knees are unloaded, snatch them under
             if tucked and com < 0.16:
                 tucked = False  # missed it: rock again
@@ -1673,10 +1673,10 @@ class SkillSystem:
                     "knee_l": 1.90, "knee_r": 1.90})
             else:
                 u = min((ag.t - t0) / 8.0, 1.0)
-                push = max(0.0, float(np.sin(2 * np.pi * 0.6 * (ag.t - t0))))
-                arch = -0.05 - 0.27 * push
+                push = max(0.0, float(np.sin(2 * np.pi * 0.55 * (ag.t - t0))))
+                arch = -0.05 - 0.30 * push
                 knee = 0.15 + 1.65 * u
-                hip = 0.15 - 1.05 * u
+                hip = 0.25 * push - 1.05 * u
                 self._rec_set({
                     "spine_bend": arch, "chest_bend": 0.7 * arch,
                     "elbow_l": -0.05, "elbow_r": -0.05,

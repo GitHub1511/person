@@ -53,6 +53,7 @@ TIME_SCALE = float(os.environ.get("OR_TIME_SCALE", "1.0"))        # tests shrink
 MIN_GAP = (60.0 / RPM + 0.25) * TIME_SCALE
 READ_TIMEOUT = float(os.environ.get("OR_READ_TIMEOUT", "420"))
 MAX_ATTEMPTS = 4
+MAX_BODY = int(os.environ.get("OR_MAX_BODY", "2097152"))  # 2 MB cap on client JSON
 LOCK = threading.Lock()
 
 
@@ -153,6 +154,26 @@ class Usage:
 U = Usage()
 
 
+def _parse_retry_after(ra) -> float | None:
+    """Robust Retry-After parse: seconds as int/float, else None (never raises)."""
+    if ra is None:
+        return None
+    try:
+        v = float(str(ra).strip())
+        if v < 0 or v != v or v == float("inf"):
+            return None
+        return v
+    except (ValueError, TypeError):
+        return None
+
+
+def _error_code(v, default: int = 500) -> int:
+    try:
+        return int(v or default) or default
+    except (ValueError, TypeError):
+        return default
+
+
 def log_request(rec: dict) -> None:
     with open(REQLOG, "a") as f:
         f.write(json.dumps(rec) + "\n")
@@ -182,17 +203,23 @@ def call_upstream(model: str, messages: list, max_tokens: int, extra: dict, iden
     try:
         resp = urllib.request.urlopen(req, timeout=READ_TIMEOUT)
     except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", "replace")[:2000]
-        ra = e.headers.get("Retry-After")
-        raise UpstreamError(e.code, body, float(ra) if ra and ra.replace(".", "").isdigit() else None)
+        try:
+            body = e.read().decode("utf-8", "replace")[:2000]
+        except Exception:
+            body = f"HTTP {e.code}"
+        raise UpstreamError(e.code, body, _parse_retry_after(e.headers.get("Retry-After")))
     except Exception as e:
         raise UpstreamError(0, f"{type(e).__name__}: {e}")
     with resp:
         ctype = resp.headers.get("Content-Type", "")
         if "text/event-stream" not in ctype:                  # a provider that ignores stream=true
-            body = json.loads(resp.read().decode("utf-8", "replace"))
+            try:
+                body = json.loads(resp.read().decode("utf-8", "replace"))
+            except (ValueError, UnicodeError) as e:
+                raise UpstreamError(502, f"bad upstream JSON: {e}")
             if "error" in body:
-                raise UpstreamError(int(body["error"].get("code", 500) or 500), json.dumps(body["error"])[:1500])
+                raise UpstreamError(_error_code(body["error"].get("code"), 500),
+                                    json.dumps(body["error"])[:1500])
             return body
         for raw in resp:
             line = raw.decode("utf-8", "replace").strip()
@@ -207,7 +234,8 @@ def call_upstream(model: str, messages: list, max_tokens: int, extra: dict, iden
             except ValueError:
                 continue
             if "error" in j:
-                raise UpstreamError(int(j["error"].get("code", 502) or 502), json.dumps(j["error"])[:1500])
+                raise UpstreamError(_error_code(j["error"].get("code"), 502),
+                                    json.dumps(j["error"])[:1500])
             mid = j.get("model", mid)
             if j.get("usage"):
                 usage = j["usage"]
