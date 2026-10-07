@@ -39,7 +39,7 @@ authoritative summary; it is deliberately conservative.
 |---|---|
 | Body, sensors, interoception, affect, drives, predictive coding, active inference (§2–§11) | Implemented and run. A 20 s reference run at `base` (seed 7) completed without a fall (§11). |
 | Whole-body control, bipedal walking, arm and hand skills, speech (§16.1–§16.4) | Standing and scripted reach/grasp/hold work in tests; **walking is unreliable** (§16.2); grasping uses an assist weld (§16.3). |
-| Fall recovery (`stand_up`, §16.7) | Under active development in this repository; its success rate is reported only where a diagnostic was run (§16.7). |
+| Fall recovery (`stand_up`, §16.7) | Under active development; the single completed diagnostic trial (2026-10-07) ended still down (§16.7). |
 | AZR as the live mind (§16.5–§16.6) | The 3B model in LM Studio answers in the expected format; a live diagnostic (`diag_azr_live.py`, 2026-10-07) produced a real thought, parsed two calls and left the body standing. Calls pass through a precondition gate. Its competence as an embodied agent, and any improvement in navigation, are **not established**; weights are not fine-tuned. |
 | Complexity levels, eyes, inner world (§17.1–§17.5) | Implemented; sizes and speed measured at `base`, `rich`, `extreme` and `max`; end-to-end behaviour at the higher levels is less tested. |
 | Learned body safety (§17.6) | Trained and evaluated at `base`: falls per simulated hour 307 → 87; the person still falls. |

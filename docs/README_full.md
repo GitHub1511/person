@@ -39,7 +39,7 @@ authoritative summary; it is deliberately conservative.
 |---|---|
 | Body, sensors, interoception, affect, drives, predictive coding, active inference (§2–§11) | Implemented and run. A 20 s reference run at `base` (seed 7) completed without a fall (§11). |
 | Whole-body control, bipedal walking, arm and hand skills, speech (§16.1–§16.4) | Standing and scripted reach/grasp/hold work in tests; **walking is unreliable** (§16.2); grasping uses an assist weld (§16.3). |
-| Fall recovery (`stand_up`, §16.7) | Under active development in this repository; its success rate is reported only where a diagnostic was run (§16.7). |
+| Fall recovery (`stand_up`, §16.7) | Under active development; the single completed diagnostic trial (2026-10-07) ended still down (§16.7). |
 | AZR as the live mind (§16.5–§16.6) | The 3B model in LM Studio answers in the expected format; a live diagnostic (`diag_azr_live.py`, 2026-10-07) produced a real thought, parsed two calls and left the body standing. Calls pass through a precondition gate. Its competence as an embodied agent, and any improvement in navigation, are **not established**; weights are not fine-tuned. |
 | Complexity levels, eyes, inner world (§17.1–§17.5) | Implemented; sizes and speed measured at `base`, `rich`, `extreme` and `max`; end-to-end behaviour at the higher levels is less tested. |
 | Learned body safety (§17.6) | Trained and evaluated at `base`: falls per simulated hour 307 → 87; the person still falls. |
@@ -882,7 +882,7 @@ stage fails visibly. Success means COM > 0.72 m and not fallen, after which the 
 exist for a lunge, a cobra push-up, a hand-walk and a table climb; the arm and trunk torque limits were raised
 above human norms to make the push-up feasible (§2.1). The corresponding diagnostics are `diag_getup.py`,
 `diag_lunge.py`, `diag_cobra.py`, `diag_handwalk.py`, `diag_table_climb.py`, `diag_slip.py` and
-`diag_walk_render.py`. No success rate is claimed: the recovery diagnostic had not been run to completion when this was written.
+`diag_walk_render.py`. **Measured status (2026-10-07).** One trial of `diag_getup.py --trials 1` (tipped onto the side from standing, 30 s allowed, automatic recovery on) ended **still down**: COM height 0.19 m at the end against the 0.72 m success criterion (peak 0.4 m), with six recovery attempts, each logging "pushup-pos made no progress" or "cobra made no progress". A first run with two trials did not finish within 400 s and reported nothing. The success rate is therefore 0 of 1 in the single completed trial; one trial is not a rate, and the code was being edited by another session while this was measured.
 
 ### 16.8 Limitations of this part
 
