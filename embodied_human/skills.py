@@ -2145,7 +2145,9 @@ class SkillSystem:
         prev = self._rec_com()
         peak = prev
         tucked = False
+        lunged = False
         lunge_side = "l" if self._recover_attempts % 2 == 0 else "r"
+        F, B = lunge_side, ("r" if lunge_side == "l" else "l")
         while ag.t - t0 < 16.0:
             face = self._rec_chest_face_z()
             com = self._rec_com()
@@ -2160,15 +2162,21 @@ class SkillSystem:
                 self._rec_caught = True
                 self.events.append("stand_up: caught roll onto knees")
                 return
-            if not tucked and com > 0.28 and vel > 0.03:
+            if lunged and com > 0.48:
+                # lunge landed: front leg takes weight, press to stand
+                self._rec_lunged = True
+                self.events.append("stand_up: lunged, pressing up")
+                return
+            if not lunged and not tucked and com > 0.34 and vel > 0.03:
+                # LUNGE catch: throw one leg forward into a lunge at the
+                # rock peak — lands ~0.5, then the front quad presses.
+                lunged = True
+                self.events.append("stand_up: lunging at the peak")
+            elif not tucked and com > 0.28 and vel > 0.03:
                 tucked = True  # big rock: fold knees, land on them
             if tucked and com < 0.18:
                 tucked = False
-            if com > 0.34 and vel > 0.03 and not getattr(self, "_rec_lunged", False):
-                # LUNGE catch: throw one leg forward into a lunge at the rock
-                # peak — lands ~0.5, then the front quad presses to stand.
-                self._rec_lunged = True
-                F, B = lunge_side, ("r" if lunge_side == "l" else "l")
+            if lunged:
                 self._rec_set({
                     f"hip_{F}_flex": -1.20, f"knee_{F}": 1.50,
                     f"hip_{B}_flex": 0.10, f"knee_{B}": 0.20,
@@ -2176,25 +2184,23 @@ class SkillSystem:
                     "spine_bend": 0.25, "chest_bend": 0.15,
                     "sh_l_flex": 0.70, "sh_r_flex": 0.70,
                     "elbow_l": -0.50, "elbow_r": -0.50})
-                self.events.append("stand_up: lunging at the peak")
             elif tucked:
-            # pump the swing at ~0.8 Hz to rock over the hump; static holds
-            # alone rock up part-way and fall back
-            pump = 0.55 + 0.45 * float(np.sin(2 * np.pi * 0.8 * (ag.t - t0)))
-            if ag.t - last_flip > 3.0:
-                if self._rec_chest_face_z() < best - 0.05:
-                    best = self._rec_chest_face_z()
-                else:
-                    sign = -sign  # wrong side: mirror the whole pose
-                    best = self._rec_chest_face_z()
-                last_flip = ag.t
-            if tucked:
                 self._rec_set({
                     "knee_l": 1.90, "knee_r": 1.90,
                     "hip_l_flex": -1.10, "hip_r_flex": -1.10,
                     "spine_bend": 0.20, "chest_bend": 0.10,
                     "sh_l_flex": 0.60, "sh_r_flex": 0.60})
             else:
+                # pump the swing at ~0.8 Hz to rock over the hump; static
+                # holds alone rock up part-way and fall back
+                pump = 0.55 + 0.45 * float(np.sin(2 * np.pi * 0.8 * (ag.t - t0)))
+                if ag.t - last_flip > 3.0:
+                    if self._rec_chest_face_z() < best - 0.05:
+                        best = self._rec_chest_face_z()
+                    else:
+                        sign = -sign  # wrong side: mirror the whole pose
+                        best = self._rec_chest_face_z()
+                    last_flip = ag.t
                 full = dict(self.q_nom_map)
                 full.update(self._rec_roll_pose(sign, pump))
                 self._rec_set({nm: tv for nm, tv in full.items()
