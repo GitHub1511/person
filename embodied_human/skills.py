@@ -2174,6 +2174,13 @@ class SkillSystem:
             vel = (com - prev) / max(TICK, 1e-6)
             prev = com
             if face < -0.50 or com > 0.35:
+                if lunged:
+                    # A lunge was thrown: landing prone with the front leg
+                    # posted still counts as a catch — continue holding the
+                    # lunge pose so the front quad can press.
+                    self._rec_lunged = True
+                    self.events.append("stand_up: lunge posted prone")
+                    return
                 self.events.append("stand_up: rolled prone")
                 return
             if tucked and com > 0.42:
