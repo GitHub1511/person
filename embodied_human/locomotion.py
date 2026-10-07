@@ -200,6 +200,7 @@ class Gait:
         # posture/balance system.  It copes far better with arm motion.
         self.hold_stance = False
         self.stand_height = None          # COM height to hold while standing (None: as found)
+        self.stand_bias = np.zeros(2)     # (lateral, forward) COM offset while standing, m
         self.q_nom = None
         self.leg_ref = np.zeros(self.n)
 
@@ -449,7 +450,7 @@ class Gait:
         a_c = np.zeros(3)
         if self.mode == "stand":
             wn = 4.5
-            a_c[:2] = wn ** 2 * (self._stand_ref - com[:2]) - 2 * 0.95 * wn * vel[:2]
+            # a deliberate weight shift / lean (behaviour layer): body-frame offset of\r\n            # the COM reference, lateral (+left) and forward, in metres\r\n            bias = self.stand_bias[0] * left(psi) + self.stand_bias[1] * fwd(psi)\r\n            a_c[:2] = wn ** 2 * (self._stand_ref + bias - com[:2]) - 2 * 0.95 * wn * vel[:2]
         else:
             a_c[:2] = omega ** 2 * (com[:2] - cop_des)
         if self._h_des is None:
