@@ -488,7 +488,7 @@ class BehaviorExecutor:
         if sk.gesture_active:
             owned[:] = np.where(self.owned_joints & ~np.array(
                 [nm in sk.gesture_targets for nm in self.names]), owned, False)
-        amp = b.amp * (0.5 if self.ambient else 1.0)
+        amp = b.amp * (0.5 if (self.ambient and not b.deliberate) else 1.0)
         tgt = self.q_nom.copy()
         for nm, v in b.joints.items():
             i = self.idx[nm]
@@ -601,8 +601,19 @@ class BehaviorExecutor:
         return self.current.name
 
     def force(self, b: Behavior, now: float) -> None:
-        """Run a given behaviour now (the mind's ``express``)."""
+        """Run a given behaviour now."""
         self.begin(b, now)
+
+    def express(self, **parts) -> list[str]:
+        """The mind's whole-body expression, from named parts.  Returns problems."""
+        from .behavior_space import build_from_names
+        d, errors = build_from_names(self.space, **parts)
+        b = self.space.compile(d)
+        b.deliberate = True
+        if "hold" not in parts:
+            b.hold = max(b.hold, 3.0)
+        self.force(b, self.ag.t)
+        return errors
 
     def summary(self) -> dict:
         s = self.stats.summary()

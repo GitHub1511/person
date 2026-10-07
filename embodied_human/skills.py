@@ -786,6 +786,21 @@ class SkillSystem:
     def api_touch_self(self, region, hand=None, action="rest"):
         self._enqueue("touch_self", (region, hand, action), self._a_touch_self(region, hand, action))
 
+    def api_express(self, **parts):
+        """A whole-body expression from named parts (see behavior_space.option_names)."""
+        beh = getattr(self.agent, "behavior", None)
+        if beh is None:
+            return
+        errors = beh.express(**parts)
+        for e in errors:
+            self.events.append(f"(express: {e})")
+
+    def api_rub_eyes(self, hand="right"):
+        self.api_touch_self("eyes", hand, "rub")
+
+    def api_scratch(self, part="scalp", hand="right"):
+        self.api_touch_self(part, hand, "scratch")
+
     def api_blink(self, kind="normal"):
         oc = getattr(self.agent, "ocular", None)
         if oc is None:

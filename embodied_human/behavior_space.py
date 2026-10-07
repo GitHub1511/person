@@ -653,6 +653,7 @@ class Behavior:
     intent: tuple | None = None                      # (mode, object)
     touch: tuple | None = None                       # (region, hand, action)
     walk: tuple | None = None                        # (speed, turn)
+    deliberate: bool = False                         # chosen by the mind: no ambient damping
 
     def key(self) -> bytes:
         return self.desc.tobytes()
