@@ -254,10 +254,12 @@ class OcularSurface:
         # ---- blink generator --------------------------------------------------
         blinking = self.phase != "open"
         attn = float(np.clip(inp.attention, 0, 1))
-        f_total = (1.0 + 4.5 * self.dryness + 2.0 * self.grit - 0.72 * attn
-                   + 0.5 * float(inp.arousal) + 0.9 * float(inp.speaking)
-                   + 0.45 * float(inp.fatigue) + 0.5 * (float(inp.dopamine) - 0.35)
-                   + 0.6 * float(inp.anxiety))
+        # concentrating suppresses blinking multiplicatively; the drive that
+        # overrides it is the sensation of dryness itself
+        f_total = ((1.0 + 0.5 * float(inp.arousal) + 0.9 * float(inp.speaking)
+                    + 0.45 * float(inp.fatigue) + 0.5 * (float(inp.dopamine) - 0.35)
+                    + 0.6 * float(inp.anxiety)) * (1.0 - 0.80 * attn)
+                   + 7.0 * self.dryness ** 2 + 2.5 * self.grit)
         f_total = float(np.clip(f_total, 0.10, 6.0))
         if not blinking:
             self.urge += dt * f_total / 4.0
