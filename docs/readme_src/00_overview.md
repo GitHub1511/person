@@ -22,13 +22,13 @@ or a count of what is *describable* rather than what has been *demonstrated*, th
 | Actuated degrees of freedom | 52 (qpos 94, qvel 88) | MuJoCo model |
 | Bodies / joints / geoms | 44 / 58 / 68 (58 colliding, 10 visual only) | MuJoCo model, §2 |
 | Skin taxels | 1,992 (`base`), 7,968 (`rich`), 17,928 (`extreme`), 31,872 (`max`) | `skin.py`, §3 |
-| Sensory scalars per frame (vision off) | 52,981 / 346,406 / 778,054 at `base` / `rich` / `extreme` | `tools/scale_complexity.py --measure` |
+| Sensory scalars per frame (vision off) | 52,981 / 346,406 / 778,054 / 1,384,030 at `base` / `rich` / `extreme` / `max` | `tools/scale_complexity.py --measure` |
 | Interoceptive variables | 67 in 11 systems | §4 |
 | Emotions / neuromodulators / drives | 28 / 25 / 21 | §5, §6 |
 | Latent state of the brain | 572 dimensions in 11 blocks | §7 |
 | Motor programs | 55 hand-written policies; 1.16 × 10³⁷ generative descriptors | §8, §17 |
-| Internal dynamic variables | 0 (`base`), 15,066 (`rich`), 36,932 (`extreme`) | §17 |
-| Speed | 0.54× (`base`), 0.42× (`rich`), 0.25× (`extreme`) real time on the reference machine | §17 |
+| Internal dynamic variables | 0 (`base`), 15,066 (`rich`), 36,932 (`extreme`), 88,892 (`max`) | §17 |
+| Speed | 0.54× (`base`), 0.42× (`rich`), 0.25× (`extreme`), 0.16× (`max`) real time on the reference machine | §17 |
 
 ## Verification status
 
@@ -40,8 +40,8 @@ authoritative summary; it is deliberately conservative.
 | Body, sensors, interoception, affect, drives, predictive coding, active inference (§2–§11) | Implemented and run. A 20 s reference run at `base` (seed 7) completed without a fall (§11). |
 | Whole-body control, bipedal walking, arm and hand skills, speech (§16.1–§16.4) | Standing and scripted reach/grasp/hold work in tests; **walking is unreliable** (§16.2); grasping uses an assist weld (§16.3). |
 | Fall recovery (`stand_up`, §16.7) | Under active development in this repository; its success rate is reported only where a diagnostic was run (§16.7). |
-| AZR as the live mind (§16.5–§16.6) | The 3B model answers in the expected format and calls pass through a precondition gate; its competence as an embodied agent is not established. Weights are not fine-tuned. |
-| Complexity levels, eyes, inner world (§17.1–§17.5) | Implemented; sizes and speed measured at `base`, `rich`, `extreme`; end-to-end behaviour at the higher levels is less tested. |
+| AZR as the live mind (§16.5–§16.6) | The 3B model in LM Studio answers in the expected format; a live diagnostic (`diag_azr_live.py`, 2026-10-07) produced a real thought, parsed two calls and left the body standing. Calls pass through a precondition gate. Its competence as an embodied agent, and any improvement in navigation, are **not established**; weights are not fine-tuned. |
+| Complexity levels, eyes, inner world (§17.1–§17.5) | Implemented; sizes and speed measured at `base`, `rich`, `extreme` and `max`; end-to-end behaviour at the higher levels is less tested. |
 | Learned body safety (§17.6) | Trained and evaluated at `base`: falls per simulated hour 307 → 87; the person still falls. |
 | Planner/coder loop and its tools (§18) | Offline tests pass; two live coder steps were reverted because they degraded olfaction and taste. |
 | Ultra tier (§19) | Framework, benchmark tools and conventions exist; **no domain subsystem has been built**: the design and build workflows returned no output. |
