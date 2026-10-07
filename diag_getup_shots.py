@@ -17,6 +17,8 @@ ag.gait.hold_stance = True
 for _ in range(500):
     ag.step()
 ra = ag.meta.root_qpos_addr
+ag.data.qpos[ra] = 1.2
+ag.data.qpos[ra + 1] = 0.6
 ag.data.qpos[ra + 2] = 0.45
 ag.data.qpos[ra + 3:ra + 7] = [0.7071, 0.7071, 0, 0]
 ag.data.qvel[:] = 0.0
