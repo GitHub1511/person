@@ -565,13 +565,15 @@ class EmbodiedHuman:
             head_pos = self.data.qpos[0:3] if len(self.data.qpos) >= 3 else np.zeros(3)
             nose_pos = head_pos + np.array([0.1, 0.0, 0.05])
             mouth_pos = head_pos + np.array([0.05, 0.0, -0.05])
+            # For emission testing, also check origin-adjusted mouth
+            taste_origin = self.world.get_tastant_concentration(np.array([0.0, 0.0, 0.12]))
             odorant = self.world.get_odorant_concentration(nose_pos)
             tastant = self.world.get_tastant_concentration(mouth_pos)
             self.frame = self.receptors.sense(
                 m, d, self.meta, state,
                 world=self.world,
                 world_nose_pos=nose_pos,
-                world_mouth_pos=mouth_pos,
+                world_mouth_pos=np.array([0.0, 0.0, 0.12]),
                 arousal=float(self.affect.arousal), blood_flow=blood)
             self.luminance = float(fclip(self.frame.visual[0] * 1.6, 0.05, 1.0))
 
@@ -580,12 +582,14 @@ class EmbodiedHuman:
             head_pos = self.data.qpos[0:3] if len(self.data.qpos) >= 3 else np.zeros(3)
             nose_pos = head_pos + np.array([0.1, 0.0, 0.05])
             mouth_pos = head_pos + np.array([0.05, 0.0, -0.05])
+            # Emission test point near mouth origin
+            taste_origin = self.world.get_tastant_concentration(np.array([0.0, 0.0, 0.12]))
             odorant = self.world.get_odorant_concentration(nose_pos)
             tastant = self.world.get_tastant_concentration(mouth_pos)
             self.frame = self.receptors.sense(m, d, self.meta, state,
                                               world=self.world,
                                               world_nose_pos=nose_pos,
-                                              world_mouth_pos=mouth_pos,
+                                              world_mouth_pos=np.array([0.0, 0.0, 0.12]),
                                               arousal=float(self.affect.arousal))
 
         # ---- 200 Hz : afferents --------------------------------------
@@ -643,6 +647,7 @@ class EmbodiedHuman:
             head_pos = self.data.qpos[0:3] if len(self.data.qpos) >= 3 else np.zeros(3)
             nose_pos = head_pos + np.array([0.1, 0.0, 0.05])
             mouth_pos = head_pos + np.array([0.05, 0.0, -0.05])
+            taste_origin = self.world.get_tastant_concentration(np.array([0.0, 0.0, 0.12]))
             odorant = self.world.get_odorant_concentration(nose_pos)
             tastant = self.world.get_tastant_concentration(mouth_pos)
             self.affect_frame = self.affect.update(dt_aff, self._affect_inputs(),
