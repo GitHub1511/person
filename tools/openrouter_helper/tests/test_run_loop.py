@@ -49,7 +49,7 @@ def main() -> int:
                OR_UPSTREAM="http://127.0.0.1:9951/v1/chat/completions", OR_PORT="9961",
                OR_TIME_SCALE="0.02", OR_QUOTA="2", OPENROUTER_API_KEY="test-not-real",
                OR_FAKE_DATE_FILE=str(datef), RUN_WAIT_TIMEOUT="12", RUN_POLL="1",
-               HELPER_SMOKE_SECS="2", PYTHONIOENCODING="utf-8")
+               HELPER_SMOKE_SECS="2", PYTHONIOENCODING="utf-8", AUTO_CODER="0")
     mock = subprocess.Popen([sys.executable, str(HELPER / "tests" / "mock_upstream.py"), "9951"])
     time.sleep(1.0)
     h = (sb / "tools" / "openrouter_helper" / "helper.sh").as_posix()

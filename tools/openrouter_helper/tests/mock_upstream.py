@@ -52,7 +52,23 @@ class H(BaseHTTPRequestHandler):
         if os.environ.get("MOCK_REJECT_BIG") and body.get("max_tokens", 0) > int(os.environ["MOCK_REJECT_BIG"]):
             self.send_response(400); self.send_header("Content-Type", "application/json"); self.end_headers()
             self.wfile.write(b'{"error":{"message":"max_tokens is too large for this model","code":400}}'); return
-        text = PLAN if "PLANNER" in json.dumps(body.get("messages", [])[:1]) else "OK"
+        msgs = body.get("messages", [])
+        if body.get("tools") and os.environ.get("MOCK_TOOLCMD") and msgs and msgs[-1].get("role") != "tool":
+            # an agent asked with tools: answer with one tool call (bash), streamed in fragments
+            cmd = os.environ["MOCK_TOOLCMD"]
+            args = json.dumps({"command": cmd})
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream"); self.end_headers()
+            frags = [{"index": 0, "id": "call_1", "type": "function", "function": {"name": "bash", "arguments": args[:9]}},
+                     {"index": 0, "function": {"arguments": args[9:]}}]
+            for f in frags:
+                ch = {"id": "x", "model": body.get("model"), "choices": [{"delta": {"tool_calls": [f]}}]}
+                self.wfile.write(f"data: {json.dumps(ch)}\n\n".encode()); self.wfile.flush()
+            fin = {"id": "x", "model": body.get("model"), "choices": [{"delta": {}, "finish_reason": "tool_calls"}],
+                   "usage": {"prompt_tokens": 10, "completion_tokens": 20}}
+            self.wfile.write(f"data: {json.dumps(fin)}\n\ndata: [DONE]\n\n".encode())
+            return
+        text = PLAN if "PLANNER" in json.dumps(msgs[:1]) else "OK"
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream"); self.end_headers()
         step = 120
