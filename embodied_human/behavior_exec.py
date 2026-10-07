@@ -275,6 +275,17 @@ class BehaviorExecutor:
         d[TI["soothe"]] = 0.9 * anx + 0.8 * sad + 0.6 * a.stress
         d[TI["object"]] = 0.7 * lv[13] + 0.4 * lv[0]
         d[TI["relax"]] = max(0.0, 0.9 * (1.0 - a.arousal) * (0.4 + em("calm")))
+        inn = getattr(ag, "inner", None)
+        if inn is not None:
+            o = inn.out
+            mw = max(o.mind_wandering, 0.0)
+            d[TI["boredom"]] += 0.5 * mw
+            d[TI["explore"]] += 0.3 * mw
+            d[TI["fatigue"]] += 0.5 * o.muscle_fatigue + 0.6 * o.sleep_pressure
+            d[TI["pain"]] += 1.0 * o.muscle_soreness + 0.6 * float(o.extra_drives[4])
+            d[TI["comfort"]] += o.gut_discomfort
+            d[TI["soothe"]] += 0.4 * o.rumination
+            d[TI["vigilance"]] += 0.5 * max(o.threat_tone, 0.0)
         return np.clip(d, 0.0, 1.6)
 
     # ------------------------------------------------------------------
