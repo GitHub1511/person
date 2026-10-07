@@ -573,6 +573,10 @@ Reinforced Self-play Reasoning with Zero Data".
 
 ---
 
+## 17. Complexity-gated chemical stimuli
+
+Added complexity level `rich` (and above) with `stimuli=True`. When enabled, static odorant (magenta sphere at (1,0,0.5)) and tastant (green sphere at (-1,0,0.5)) sources emit concentrations inversely proportional to squared distance from the nose/mouth, varying with body position. This drives olfactory/gustatory receptor variance and subsequent interoceptive, drive, and affect changes.
+
 ## 16. Walking, hands, speech, and a mind
 
 This part was added on top of the body above.  It is deliberately described
