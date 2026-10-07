@@ -120,6 +120,14 @@ def main() -> int:
             mock = subprocess.Popen([sys.executable, str(HELPER / "tests" / "mock_upstream.py"), "9951"])
             killed_mock = True
             print("  (restarted the mock upstream after step 6)", flush=True)
+    # ask it to stop; a step that is in flight must still be verified (and undone if broken)
+    subprocess.run([BASH, h, "stop"], env=env, capture_output=True)
+    t_stop = time.time()
+    while run.poll() is None and time.time() - t_stop < 180:
+        time.sleep(1)
+    check("`stop` ends the loop (after verifying any step in flight)", run.poll() is not None,
+          f"{time.time() - t_stop:.0f}s")
+    stop_flag.set()
     H = hist()
     print(f"{len(H)} steps recorded in {time.time() - t0:.0f}s; coder actions: {log_actions}", flush=True)
     check(f"the loop completed {steps} steps", len(H) >= steps, str(len(H)))
@@ -138,26 +146,7 @@ def main() -> int:
     log = (sb / "run.log").read_text()
     check("it survived the gateway being killed", killed_proxy and len(H) > 3)
 
-    if usage["total"] >= 10 or "quota" in log:
-        print("  waiting for the quota message ...", flush=True)
-        t1 = time.time()
-        while "resuming in" not in (sb / "run.log").read_text() and time.time() - t1 < 400:
-            time.sleep(3)
-        check("at quota it waits for the next day instead of spinning", "resuming in" in (sb / "run.log").read_text())
-        datef.write_text("2026-03-02")
-        n_before = len(hist())
-        t1 = time.time()
-        # the loop sleeps in 30 s chunks until the (real) midnight; poke it by restarting the wait
-        subprocess.run([BASH, h, "stop"], env=env, capture_output=True)
-        time.sleep(1)
-    stop_flag.set()
-    t2 = time.time()
-    subprocess.run([BASH, h, "stop"], env=env, capture_output=True)
-    while run.poll() is None and time.time() - t2 < 60:
-        time.sleep(1)
-    check("`stop` ends the loop promptly", run.poll() is not None, f"{time.time() - t2:.0f}s")
-    if run.poll() is None:
-        run.kill()
+    # (the quota path is exercised by test_gateway.py; here the loop was stopped while healthy)
     mock.kill()
     print("\n" + ("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}"))
     print("sandbox:", sb)
