@@ -1761,6 +1761,78 @@ class SkillSystem:
         sk.events.append(f"stand_up: up the leg (COM {sk._rec_com():.2f} m), kneeling")
         return True
 
+    def _rec_knee_load(self) -> float:
+        """Total normal force on both knee/shin complexes (N). Gating the
+        kneel rise on this (not just folded joints) is what distinguishes a
+        real kneel from legs folded in the air."""
+        try:
+            total = 0.0
+            for c in self.agent.state.contacts:
+                n = (c.name1 + " " + c.name2).lower()
+                if "kneecap" in n or "shin" in n or "knee" in n:
+                    total += abs(float(c.force[0]))
+            return float(total)
+        except Exception:
+            return 0.0
+
+    def _rec_floor_to_kneel(self):
+        """One closed loop from prone to tall kneel: pump the cobra rock,
+        latch the tuck on rising rocks, and — only once the knees carry
+        load — extend the hips to rise. Done at COM 0.58."""
+        ag = self.agent
+        t0 = ag.t
+        prev = self._rec_com()
+        peak = prev
+        tucked = False
+        while ag.t - t0 < 25.0:
+            com = self._rec_com()
+            peak = max(peak, com)
+            if com > 0.58:
+                self.events.append("stand_up: tall kneel")
+                return
+            vel = (com - prev) / max(TICK, 1e-6)
+            prev = com
+            if not tucked and com > 0.19 and vel > 0.04:
+                tucked = True
+            if tucked and self._rec_knee_load() > 50.0:
+                # knees planted: rise now, hips extend, torso upright
+                self._rec_set({
+                    "knee_l": 1.70, "knee_r": 1.70,
+                    "hip_l_flex": -0.15, "hip_r_flex": -0.15,
+                    "ankle_l_flex": -0.20, "ankle_r_flex": -0.20,
+                    "spine_bend": 0.10, "chest_bend": 0.05,
+                    "sh_l_flex": 0.30, "sh_r_flex": 0.30,
+                    "elbow_l": -0.50, "elbow_r": -0.50})
+            elif tucked:
+                push = max(0.0, float(np.sin(2 * np.pi * 0.55 * (ag.t - t0))))
+                arch = -0.05 - 0.30 * push
+                arm = 0.90 - 1.80 * push
+                self._rec_set({
+                    "spine_bend": arch, "chest_bend": 0.7 * arch,
+                    "neck_bend": -0.30 * push,
+                    "elbow_l": -0.05, "elbow_r": -0.05,
+                    "sh_l_flex": arm, "sh_r_flex": arm,
+                    "hip_l_flex": -1.10, "hip_r_flex": -1.10,
+                    "knee_l": 1.90, "knee_r": 1.90})
+            else:
+                u = min((ag.t - t0) / 8.0, 1.0)
+                push = max(0.0, float(np.sin(2 * np.pi * 0.55 * (ag.t - t0))))
+                arch = -0.05 - 0.30 * push
+                knee = 0.15 + 0.65 * u
+                hip = 0.25 * push - 0.45 * u
+                arm = 0.90 - 1.80 * push
+                self._rec_set({
+                    "spine_bend": arch, "chest_bend": 0.7 * arch,
+                    "neck_bend": -0.30 * push,
+                    "elbow_l": -0.05, "elbow_r": -0.05,
+                    "sh_l_flex": arm, "sh_r_flex": arm,
+                    "hip_l_flex": hip, "hip_r_flex": hip,
+                    "knee_l": knee, "knee_r": knee,
+                    "ankle_l_flex": 0.30, "ankle_r_flex": 0.30})
+            yield
+        raise ActionFailed(f"stand_up: no loaded kneel "
+                           f"(COM {self._rec_com():.2f} m, peak {peak:.2f} m)")
+
     def _rec_cobra(self):
         ag = self.agent
         t0 = ag.t
