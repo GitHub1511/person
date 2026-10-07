@@ -1637,12 +1637,16 @@ class SkillSystem:
                      "elbow_l": -0.30, "elbow_r": -0.30},
                     5.0, lambda: self._rec_com() > 0.42, "knees-under")
             yield from self._rec_hold(
+                # Rise to tall kneel: extend the hips (thighs vertical) while
+                # the knees stay planted and the torso comes upright — the
+                # glutes lift the torso pivoting on the knees.
                 {"knee_l": 1.70, "knee_r": 1.70,
-                 "hip_l_flex": -1.00, "hip_r_flex": -1.00,
-                 "ankle_l_flex": -0.60, "ankle_r_flex": -0.60,
-                 "spine_bend": 0.12, "chest_bend": 0.08,
-                 "sh_l_flex": 0.60, "sh_r_flex": 0.60},
-                3.0, lambda: self._rec_com() > 0.60, "kneel")
+                 "hip_l_flex": -0.15, "hip_r_flex": -0.15,
+                 "ankle_l_flex": -0.20, "ankle_r_flex": -0.20,
+                 "spine_bend": 0.10, "chest_bend": 0.05,
+                 "sh_l_flex": 0.30, "sh_r_flex": 0.30,
+                 "elbow_l": -0.50, "elbow_r": -0.50},
+                6.0, lambda: self._rec_com() > 0.58, "kneel")
             yield from self._rec_hold(
                 {"knee_l": 0.40, "hip_l_flex": -0.30, "ankle_l_flex": -0.15,
                  "knee_r": 1.60, "hip_r_flex": -1.10, "ankle_r_flex": -0.55,
