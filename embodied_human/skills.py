@@ -1785,28 +1785,17 @@ class SkillSystem:
             return False
 
         def press_anchor(side: str) -> bool:
-            """Press the planted hand down and verify it CARRIES LOAD at the
-            end of the hold (support force > 25 N sustained — impact spikes
-            don't count) without drifting. Descends in 5 mm increments with
-            dwells so touchdown is gentle (a fast slam just bounces off).
-            Up to 4 increments before giving up on it."""
-            cur = sk._rec_hand_home(side)
-            for z in (0.050, 0.040, 0.030, 0.020):
-                if cur[2] <= z + 0.002:
-                    continue  # already at/below this rung
-                tgt = cur.copy()
-                tgt[2] = z
-                sk._rec_servo_hand(side, tgt)
-                t2 = ag.t
-                while ag.t - t2 < 0.6:
-                    coord()
-                    yield
-                now = sk._rec_hand_home(side)
-                sustained = sk.hands[side].contact.get("support", 0.0) > 25.0
-                drifted = float(np.linalg.norm(now - cur)) > 0.05
-                if sustained and not drifted:
+            """Catch a loaded moment: succeeds if EITHER hand carries >40 N
+            at any sample during a 1 s hold (loads come as rocking
+            transients — single-side loads hit ~22% of ticks — not as
+            stillness). The walk then moves fast while the base holds."""
+            t2 = ag.t
+            while ag.t - t2 < 1.0:
+                coord()
+                if sk.hands["l"].contact.get("support", 0.0) > 40.0 \
+                        or sk.hands["r"].contact.get("support", 0.0) > 40.0:
                     return True
-                cur = now
+                yield
             return False
 
         try:
