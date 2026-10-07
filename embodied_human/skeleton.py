@@ -157,7 +157,7 @@ EYE_X, EYE_Y, EYE_Z = 0.030, -0.0955, 0.078
 T = {
     "spine_bend": 150.0, "spine_side": 100.0, "spine_twist": 55.0,
     "neck": 18.0, "jaw": 45.0, "eye": 0.05,
-    "sh_flex": 120.0, "sh_abd": 90.0, "sh_rot": 40.0,
+    "sh_flex": 110.0, "sh_abd": 90.0, "sh_rot": 40.0,
     "elbow": 80.0, "wrist_flex": 14.0, "wrist_dev": 10.0,
     # Real finger flexors produce a few newton-metres at the MCP joint; the
     # earlier 18 Nm would crush an apple and registers as phantom pain.
