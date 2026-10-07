@@ -340,6 +340,7 @@ class BehaviorExecutor:
                 + 0.5 * b.tremor * 10 + self.safety_weight * hazard \
                 + (4.0 * max(p_unsafe - 0.6, 0.0) * self.safety_weight) \
                 + self.repeat_penalty * rep
+        G = np.nan_to_num(G, nan=50.0, posinf=50.0, neginf=-50.0)
         G = G - G.min()
         temp = max(0.15, 0.9 * (0.6 + arousal))
         z = -G / temp
