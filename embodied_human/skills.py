@@ -1818,6 +1818,7 @@ class SkillSystem:
             t1 = ag.t
             released_l = released_r = False
             plants = {s: sk._rec_hand_home(s).copy() for s in "lr"}
+            ok = False
             while ag.t - t1 < 6.0:
                 com = sk._rec_com()
                 chest_up = float(ag.data.xmat[
@@ -1831,6 +1832,7 @@ class SkillSystem:
                     sk.arm["r"].begin_retract()
                     released_r = True
                 if released_r and (not ag.state.fallen and com > 0.72 and bal < 0.02):
+                    ok = True
                     break
                 if bal > 0.06 and (released_l != released_r):
                     # tipping with one hand off: re-plant the released hand
