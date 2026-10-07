@@ -1736,6 +1736,34 @@ class SkillSystem:
             e = -1.3 + min(sp / 0.5, 1.0) * 1.2
             sk._rec_set({"elbow_l": e, "elbow_r": e})
 
+        def wait_hold(side: str, timeout: float, err_ok: float) -> bool:
+            t2 = ag.t
+            while ag.t - t2 < timeout:
+                coord()
+                if sk.arm[side].err_pos < err_ok:
+                    return True
+                yield
+            return False
+
+        def press_anchor(side: str) -> bool:
+            """Press the planted hand down and verify stiction by position:
+            a hand that stays within 2 cm over 0.7 s while pressed is an
+            anchor; one that drifts is slipping and gets re-pressed deeper
+            (up to 3 tries) before giving up on it."""
+            for depth in (0.005, -0.010, -0.025):
+                cur = sk._rec_hand_home(side)
+                tgt = cur.copy()
+                tgt[2] = depth
+                sk._rec_servo_hand(side, tgt)
+                t2 = ag.t
+                while ag.t - t2 < 0.7:
+                    coord()
+                    yield
+                now = sk._rec_hand_home(side)
+                if float(np.linalg.norm(now - cur)) < 0.020:
+                    return True
+            return False
+
         try:
             while ag.t - t0 < 60.0:
                 coord()
@@ -1754,27 +1782,13 @@ class SkillSystem:
                 over = cur.copy()
                 over[2] = cur[2] + 0.10
                 sk._rec_servo_hand(s, over)
-                t2 = ag.t
-                while ag.t - t2 < 1.0:
-                    if sk.arm[s].err_pos < 0.05:
-                        break
-                    yield
-                shifted = (cur + np.array([back[0], back[1], 0.0]) * 0.10).copy()
+                yield from wait_hold(s, 1.0, 0.05)
+                shifted = (cur + np.array([back[0], back[1], 0.0]) * 0.05).copy()
                 shifted[2] = cur[2] + 0.10
                 sk._rec_servo_hand(s, shifted)
-                t2 = ag.t
-                while ag.t - t2 < 1.2:
-                    if sk.arm[s].err_pos < 0.05:
-                        break
-                    yield
-                plant = shifted.copy()
-                plant[2] = 0.005  # press into the ground: stiction anchor
-                sk._rec_servo_hand(s, plant)
-                t2 = ag.t
-                while ag.t - t2 < 1.2:
-                    if sk.arm[s].err_pos < 0.05:
-                        break
-                    yield
+                yield from wait_hold(s, 1.2, 0.05)
+                if not (yield from press_anchor(s)):
+                    sk.events.append(f"stand_up: {s} hand keeps slipping, continuing")
                 yield
             else:
                 raise ActionFailed(f"stand_up: hands never got under (COM {sk._rec_com():.2f} m)")
