@@ -1714,8 +1714,20 @@ class SkillSystem:
             sk._rec_servo_hand(s, sk._rec_hand_home(s))
         t0 = ag.t
         step_side = "l"
+
+        def coord() -> None:
+            # Coordinate the press with the fold: as the spine jackknifes,
+            # the elbows extend so the arms stop pinning the chest down.
+            try:
+                sp = max(float(ag.state.qof("spine_bend")), 0.0)
+            except Exception:
+                sp = 0.0
+            e = -1.3 + min(sp / 0.5, 1.0) * 1.2
+            sk._rec_set({"elbow_l": e, "elbow_r": e})
+
         try:
             while ag.t - t0 < 60.0:
+                coord()
                 up = float(ag.data.xmat[ag.meta.body_ids["chest"]].reshape(3, 3)[2, 2])
                 if up > 0.45 and sk._rec_com() > 0.55:
                     sk.events.append("stand_up: bent-over stance, unrolling")
