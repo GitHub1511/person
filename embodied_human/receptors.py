@@ -67,6 +67,8 @@ from ._fast import fclip
 from . import skin
 from .complexity import C as COMPLEXITY
 from .config import SimConfig
+from .senses_ext import (Cochlea, GustatoryBank, OlfactoryBank, RetinaBank,
+                         SpindleBank, VestibularBank)
 from .state import BodyState
 
 # Tactile channel layout -----------------------------------------------------
@@ -171,6 +173,18 @@ class ReceptorFrame:
     affective_touch: float = 0.0
     touch_intensity: float = 0.0
     contact_count: int = 0
+
+    # Cell populations (spindles, hair cells, receptor types, retina) -- name ->
+    # flat array of firing rates / activations.  See senses_ext.py.
+    ext: dict = field(default_factory=dict)
+
+    def n_scalars(self) -> int:
+        """How many sensory numbers this frame carries."""
+        n = int(self.tactile.size) + int(self.proprio.size) + len(self.vestibular) \
+            + len(self.visual) + len(self.auditory) + len(self.olfactory) \
+            + len(self.gustatory) + len(self.chemo_summary)
+        n += sum(int(v.size) for v in self.ext.values())
+        return n
 
     def summary_vector(self) -> np.ndarray:
         """A compact, fixed-length feature vector for learning."""
@@ -1097,6 +1111,20 @@ class ReceptorSystem:
         self.visual = VisualSystem(cfg, meta)
         self.auditory = AuditorySystem(cfg, meta)
         self.chemo = ChemoSystem(cfg, meta)
+        # ---- cell populations (see senses_ext.py) ----------------------------
+        seed = cfg.seed
+        self.spindles = SpindleBank(self.proprio.n, self.proprio.moment_arm,
+                                    meta.torque_limit, seed + 101)
+        self.vest_cells = VestibularBank(seed + 102)
+        self.cochlea = Cochlea(cfg.audio.n_bands, cfg.audio.f_min, cfg.audio.f_max,
+                               seed + 103)
+        self.olfactory = OlfactoryBank(cfg.chemo.n_olfactory_channels, seed + 104)
+        self.gustatory = GustatoryBank(seed + 105)
+        self.head_id = meta.body_ids.get("head")
+        # set from outside (the agent / skills) -- see EmbodiedHuman.step
+        self.self_voice = 0.0          # loudness of the person's own voice
+        self.resp_rate = 13.0          # breaths per minute, for sniffing
+        self.fusimotor = 0.35
 
     def sense(self, model, data, meta, state: BodyState, *,
               arousal: float = 0.3, blood_flow: float = 1.0) -> ReceptorFrame:
@@ -1109,6 +1137,33 @@ class ReceptorSystem:
         vis = self.visual.sense(model, data, meta, state, arousal=arousal)
         aud = self.auditory.sense(model, data, meta, state)
         olf, gus, chemo_sum = self.chemo.sense(model, data, meta, state)
+
+        # ---- populations ------------------------------------------------------
+        ext: dict[str, np.ndarray] = {}
+        ext["spindle"] = self.spindles.sense(state.q, state.qd, state.tau, dt,
+                                             fusimotor=self.fusimotor + 0.4 * arousal)
+        ext["vestibular_cells"] = self.vest_cells.sense(vest[3:6], vest[6:9], dt)
+        hid = self.head_id
+        head_pos = data.xpos[hid].copy() if hid is not None else np.zeros(3)
+        head_R = data.xmat[hid].reshape(3, 3).copy() if hid is not None else np.eye(3)
+        cps, cas = [], []
+        if state.contacts:
+            loud = sorted(state.contacts, key=lambda c: -abs(float(c.force[0])))[:6]
+            for c in loud:
+                a = abs(float(c.force[0])) * 0.02
+                if a > 1e-4:
+                    cps.append(c.pos)
+                    cas.append(a)
+        ext["cochlea"] = self.cochlea.sense(
+            state.t, dt, head_pos, head_R, self.auditory.bands,
+            np.array(cps) if cps else np.zeros((0, 3)), np.array(cas),
+            self_voice=self.self_voice)
+        ext["olfactory"] = self.olfactory.sense(self.chemo.odor_conc, dt,
+                                                resp_rate=self.resp_rate,
+                                                novelty=self.chemo.novelty)
+        ext["gustatory"] = self.gustatory.sense(gus, dt)
+        if self.visual.last_retina is not None:
+            ext["retina"] = self.visual.last_retina
 
         pain_mech = float((tact[:, CH["noci_mech"]]).max()) if len(tact) else 0.0
         pain_heat = float((tact[:, CH["noci_heat"]]).max()) if len(tact) else 0.0
@@ -1141,6 +1196,7 @@ class ReceptorSystem:
             affective_touch=ct,
             touch_intensity=touch_int,
             contact_count=int(mask.sum()) if mask.size else 0,
+            ext=ext,
         )
 
     def reset(self) -> None:
