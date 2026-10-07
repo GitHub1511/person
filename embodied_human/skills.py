@@ -1553,17 +1553,20 @@ class SkillSystem:
         self.crouch = depth
 
     def _a_stand_up(self):
-        """Staged fall recovery: tuck -> kneel -> half-kneel -> stand.
+        """Closed-loop fall recovery: roll to prone -> push -> tuck -> kneel
+        -> half-kneel -> stand, each stage verified before advancing.
 
-        Drives the whole body through postures via ``recovery_targets`` (which
-        beat every other controller in ``override_target``) and lets the
-        contacts support each stage. Success is verified, not assumed: the
-        body must be unstably-high (COM > 0.72 m) and not fallen at the end,
-        after which the whole-body stance hold takes over again.
+        Drives the whole body through ``recovery_targets`` (which beat every
+        other controller in ``override_target`` and are exempt from postural
+        prioritisation in ``lean_exempt``). Every stage has a done-condition
+        on the live body (chest orientation, COM height) plus a timeout, so a
+        blocked stage fails loudly instead of posing on the floor — and the
+        auto-recovery reflex retries with the mirrored roll direction.
+        Success is verified: COM > 0.72 m and not fallen, then the whole-body
+        stance hold takes over again.
         """
         ag = self.agent
         nom = self.q_nom_map
-        # free the hands for pushing and stop everything else
         for s in "lr":
             if self.held[s] is not None:
                 try:
@@ -1575,78 +1578,36 @@ class SkillSystem:
         ag.gait.stop()
         self.gesture_active = False
         self.recovery_active = True
-
-        def pose(**over):
-            p = dict(nom)
-            p.update(over)
-            return p
-
-        tuck, kneel, half, stand = {}, {}, {}, {}
-        for s in "lr":
-            tuck.update({f"knee_{s}": 1.60, f"hip_{s}_flex": -1.30,
-                         f"ankle_{s}_flex": -0.50, f"sh_{s}_flex": 0.90,
-                         f"sh_{s}_abd": 0.25, f"elbow_{s}": -0.90})
-            kneel.update({f"knee_{s}": 1.70, f"hip_{s}_flex": -1.10,
-                          f"ankle_{s}_flex": -0.60, f"sh_{s}_flex": 0.70,
-                          f"sh_{s}_abd": 0.20, f"elbow_{s}": -0.70})
-            half.update({f"sh_{s}_flex": 0.50, f"sh_{s}_abd": 0.15,
-                         f"elbow_{s}": -0.60})
-            stand.update({f"knee_{s}": nom.get(f"knee_{s}", 0.10),
-                          f"hip_{s}_flex": nom.get(f"hip_{s}_flex", 0.0),
-                          f"ankle_{s}_flex": nom.get(f"ankle_{s}_flex", 0.0),
-                          f"sh_{s}_flex": nom.get(f"sh_{s}_flex", 0.02),
-                          f"sh_{s}_abd": nom.get(f"sh_{s}_abd", 0.0),
-                          f"elbow_{s}": nom.get(f"elbow_{s}", -0.30)})
-        tuck.update({"spine_bend": 0.35, "chest_bend": 0.20})
-        kneel.update({"spine_bend": 0.15, "chest_bend": 0.10})
-        half.update({"spine_bend": 0.08, "chest_bend": 0.05,
-                     "knee_l": 0.40, "hip_l_flex": -0.30,
-                     "knee_r": 1.60, "hip_r_flex": -1.10,
-                     "ankle_l_flex": -0.15, "ankle_r_flex": -0.55})
-        stand.update({"spine_bend": nom.get("spine_bend", 0.02),
-                      "chest_bend": nom.get("chest_bend", 0.0)})
-
-        stages = [(pose(**tuck), 3.0), (pose(**kneel), 3.5),
-                  (pose(**half), 3.5), (pose(**stand), 4.0)]
         try:
-            d = ag.data
-            cur = {nm: float(d.qpos[ag.meta.qpos_addr[nm]])
-                   for nm in stand if nm in ag.meta.qpos_addr}
-            for tgt, dur in stages:
-                n = max(int(dur / TICK), 1)
-                start = dict(cur)
-                for i in range(n):
-                    u = (i + 1) / n
-                    u = u * u * (3 - 2 * u)
-                    for nm, tv in tgt.items():
-                        if nm in start:
-                            self.recovery_targets[nm] = (
-                                (1 - u) * start[nm] + u * tv)
-                        else:
-                            self.recovery_targets[nm] = tv
-                    if self.agent.state is not None and not self.agent.state.fallen \
-                            and tgt is stand and i > n // 2:
-                        break  # already up: stop driving, let stance hold
-                    yield
-                cur = {nm: float(self.recovery_targets.get(nm, cur.get(nm, 0.0)))
-                       for nm in cur}
-            # verify: hold the stand pose and watch the COM
-            ok_until = None
-            t0 = ag.t
-            while ag.t - t0 < 4.0:
-                for nm in stand:
-                    if nm in ag.meta.qpos_addr:
-                        self.recovery_targets[nm] = stand[nm]
-                st = self.agent.state
-                com_z = float(st.com[2]) if st is not None else 0.0
-                if st is not None and not st.fallen and com_z > 0.72:
-                    if ok_until is None:
-                        ok_until = ag.t
-                    if ag.t - ok_until > 1.0:
-                        break
-                else:
-                    ok_until = None
-                yield
+            yield from self._rec_roll()
+            yield from self._rec_hold(
+                {"elbow_l": -0.05, "elbow_r": -0.05,
+                 "sh_l_flex": 0.45, "sh_r_flex": 0.45,
+                 "spine_bend": -0.05, "chest_bend": 0.0,
+                 "hip_l_flex": -0.10, "hip_r_flex": -0.10,
+                 "knee_l": 0.15, "knee_r": 0.15},
+                5.0, lambda: self._rec_com() > 0.35, "push",
+                proceed=lambda: self._rec_com() > 0.30)
+            yield from self._rec_hold(
+                {"knee_l": 1.80, "knee_r": 1.80,
+                 "hip_l_flex": -1.20, "hip_r_flex": -1.20,
+                 "spine_bend": 0.30, "chest_bend": 0.15,
+                 "sh_l_flex": 0.70, "sh_r_flex": 0.70},
+                5.0, lambda: self._rec_com() > 0.48, "tuck")
+            yield from self._rec_hold(
+                {"knee_l": 1.70, "knee_r": 1.70,
+                 "hip_l_flex": -1.00, "hip_r_flex": -1.00,
+                 "ankle_l_flex": -0.60, "ankle_r_flex": -0.60,
+                 "spine_bend": 0.12, "chest_bend": 0.08,
+                 "sh_l_flex": 0.60, "sh_r_flex": 0.60},
+                5.0, lambda: self._rec_com() > 0.60, "kneel")
+            yield from self._rec_hold(
+                {"knee_l": 0.40, "hip_l_flex": -0.30, "ankle_l_flex": -0.15,
+                 "knee_r": 1.60, "hip_r_flex": -1.10, "ankle_r_flex": -0.55,
+                 "spine_bend": 0.08, "chest_bend": 0.05,
+                 "sh_l_flex": 0.50, "sh_r_flex": 0.50},
+                5.0, lambda: self._rec_com() > 0.68, "half-kneel")
+            yield from self._rec_stand(nom)
             st = self.agent.state
             com_z = float(st.com[2]) if st is not None else 0.0
             if st is None or st.fallen or com_z <= 0.70:
@@ -1658,6 +1619,128 @@ class SkillSystem:
         finally:
             self.recovery_active = False
             self.recovery_targets = {}
+
+    # ---- recovery helpers (closed loop on the live body) -----------------
+    def _rec_com(self) -> float:
+        st = self.agent.state
+        return float(st.com[2]) if st is not None else 0.0
+
+    def _rec_chest_up_z(self) -> float:
+        try:
+            ag = self.agent
+            cid = ag.meta.body_ids["chest"]
+            return float(ag.data.xmat[cid].reshape(3, 3)[2, 2])
+        except Exception:
+            return 0.0
+
+    def _rec_set(self, tgt: dict) -> None:
+        for nm, tv in tgt.items():
+            if nm in self.motor_idx:
+                self.recovery_targets[nm] = float(tv)
+
+    def _rec_hold(self, over: dict, timeout: float, done, stage: str,
+                  proceed=None):
+        """Blend to ``over`` (from nominal base), hold until ``done``."""
+        ag = self.agent
+        tgt = dict(self.q_nom_map)
+        tgt.update(over)
+        want = {nm: tv for nm, tv in tgt.items() if nm in ag.meta.qpos_addr}
+        d = ag.data
+        start = {nm: float(d.qpos[ag.meta.qpos_addr[nm]]) for nm in want}
+        n = max(int(1.2 / TICK), 1)
+        for i in range(n):
+            u = (i + 1) / n
+            u = u * u * (3 - 2 * u)
+            for nm, tv in want.items():
+                self.recovery_targets[nm] = (1 - u) * start[nm] + u * tv
+            yield
+        self._rec_set(want)
+        t0 = ag.t
+        while ag.t - t0 < timeout:
+            if done():
+                return
+            yield
+        if proceed is not None and proceed():
+            self.events.append(f"stand_up: {stage} partial, continuing")
+            return
+        raise ActionFailed(f"stand_up: {stage} made no progress "
+                           f"(COM {self._rec_com():.2f} m)")
+
+    def _rec_roll(self):
+        """Roll until prone (chest-back faces up) or the COM lifts."""
+        ag = self.agent
+        if self._rec_chest_up_z() > 0.55 or self._rec_com() > 0.35:
+            return
+        sign = 1.0 if self._recover_attempts % 2 == 1 else -1.0
+        base = {"sh_l_abd": 0.50, "sh_r_abd": 0.50,
+                "elbow_l": -0.40, "elbow_r": -0.40,
+                "knee_l": 0.50, "knee_r": 0.50,
+                "hip_l_flex": -0.30, "hip_r_flex": -0.30}
+        t0 = ag.t
+        last_flip = ag.t
+        best = self._rec_chest_up_z()
+        tw = sign * 0.55
+        while ag.t - t0 < 9.0:
+            if self._rec_chest_up_z() > 0.55 or self._rec_com() > 0.35:
+                self.events.append("stand_up: rolled prone")
+                return
+            if ag.t - last_flip > 2.5:
+                if self._rec_chest_up_z() > best + 0.05:
+                    best = self._rec_chest_up_z()
+                else:
+                    tw = -tw  # wrong way: flip the twist
+                    best = self._rec_chest_up_z()
+                last_flip = ag.t
+            tgt = dict(base)
+            tgt["spine_twist"] = tw
+            tgt["chest_twist"] = tw
+            full = dict(self.q_nom_map)
+            full.update(tgt)
+            self._rec_set({nm: tv for nm, tv in full.items()
+                           if nm in ag.meta.qpos_addr})
+            yield
+        raise ActionFailed("stand_up: could not roll prone "
+                           f"(chest_up {self._rec_chest_up_z():+.2f})")
+
+    def _rec_stand(self, nom):
+        tgt = {f"knee_{s}": nom.get(f"knee_{s}", 0.10) for s in "lr"}
+        for s in "lr":
+            tgt.update({f"hip_{s}_flex": nom.get(f"hip_{s}_flex", 0.0),
+                        f"ankle_{s}_flex": nom.get(f"ankle_{s}_flex", 0.0),
+                        f"sh_{s}_flex": nom.get(f"sh_{s}_flex", 0.02),
+                        f"sh_{s}_abd": nom.get(f"sh_{s}_abd", 0.0),
+                        f"elbow_{s}": nom.get(f"elbow_{s}", -0.30)})
+        tgt.update({"spine_bend": nom.get("spine_bend", 0.02),
+                    "chest_bend": nom.get("chest_bend", 0.0)})
+        ag = self.agent
+        want = {nm: tv for nm, tv in tgt.items() if nm in ag.meta.qpos_addr}
+        d = ag.data
+        start = {nm: float(d.qpos[ag.meta.qpos_addr[nm]]) for nm in want}
+        n = max(int(1.5 / TICK), 1)
+        for i in range(n):
+            u = (i + 1) / n
+            u = u * u * (3 - 2 * u)
+            for nm, tv in want.items():
+                self.recovery_targets[nm] = (1 - u) * start[nm] + u * tv
+            st = self.agent.state
+            if st is not None and not st.fallen and self._rec_com() > 0.72:
+                break  # already up: stop driving, let stance hold
+            yield
+        self._rec_set(want)
+        ok_until = None
+        t0 = ag.t
+        while ag.t - t0 < 7.0:
+            st = self.agent.state
+            com_z = self._rec_com()
+            if st is not None and not st.fallen and com_z > 0.72:
+                if ok_until is None:
+                    ok_until = ag.t
+                if ag.t - ok_until > 1.0:
+                    return
+            else:
+                ok_until = None
+            yield
+        raise ActionFailed(f"stand_up: stand not reached (COM {self._rec_com():.2f} m)")
 
     def _a_gesture(self, name, hand):
         dur, fn, default_side = GESTURES[name]

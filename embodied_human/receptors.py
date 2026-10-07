@@ -360,7 +360,7 @@ class TactileSystem:
                 su[idxs] += (ft1 * t1x + ft2 * t2x) * wn
                 sv[idxs] += (ft1 * t1y + ft2 * t2y) * wn
 
-        normal = np.abs(normal)
+        normal = np.nan_to_num(np.abs(normal), nan=0.0, posinf=2000.0)
         area = np.maximum(self.area, 1e-4)
 
         # ---- pressure, shear, indentation, area -------------------------
