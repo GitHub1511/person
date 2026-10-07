@@ -39,6 +39,8 @@ from .drives import DRIVES, DriveFrame, DriveSystem, SETPOINTS
 from .interoception import (IDX, INTERO_NAMES, InteroInputs, InteroceptiveSystem,
                             N_INTEROCEPTION)
 from .behavior_exec import BehaviorExecutor
+from .complexity import C as COMPLEXITY
+from .inner_world import (EXTRA_DRIVES, N_INNER_SUMMARY, N_OCULAR_SUMMARY, InnerWorld)
 from .intrinsic import IntrinsicMotivation, RewardFrame
 from .locomotion import Gait
 from .ocular import EyeRig, OcularInputs, OcularSurface
@@ -90,6 +92,9 @@ class LatentSpec:
                             + len(R.GUSTATORY_CHANNELS)))
         self.blocks.append(("intero", N_INTEROCEPTION))
         self.blocks.append(("affect", 10))
+        # appended after everything that already existed, so no earlier offset moves
+        self.blocks.append(("ocular", N_OCULAR_SUMMARY))
+        self.blocks.append(("inner", N_INNER_SUMMARY))
         self.offset: dict[str, int] = {}
         self.dim = 0
         for name, size in self.blocks:
@@ -99,7 +104,8 @@ class LatentSpec:
     # ------------------------------------------------------------------
     def build(self, frame: ReceptorFrame, aff, intero: InteroceptiveSystem,
               affect: AffectFrame, drives: DriveFrame,
-              state: BodyState, pred: PredictionFrame | None
+              state: BodyState, pred: PredictionFrame | None,
+              ocular=None, inner=None
               ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Return (latent, preferred, precision)."""
         L = np.zeros(self.dim)
@@ -216,6 +222,21 @@ class LatentSpec:
                        affect.stress]
         P[o:o + 10] = [0.60, 0.45, 0.70, 0.08, 0.0, 0.45, 0.0, 0.0, 0.0, 0.08]
         W[o:o + 10] = [1.0, 0.2, 0.3, 0.6, 0.8, 0.2, 0.4, 0.3, 0.5, 0.6]
+
+        # ---- the eyes ------------------------------------------------------
+        o = self.offset["ocular"]
+        if ocular is not None:
+            L[o:o + N_OCULAR_SUMMARY] = ocular
+            # prefer comfortable, well-wetted eyes with an ordinary blink rate
+            P[o:o + N_OCULAR_SUMMARY] = [0, 0, 0, 0, 0, 0.5, 1.0, 0, 0, 0, 0, 1.0, 0, 0, 0.5, 0]
+            W[o:o + N_OCULAR_SUMMARY] = [1.2, 1.2, 1.2, 1.6, 0.8, 0.1, 0.1, 0.8, 0.1, 0.5, 0.2,
+                                         0.1, 0.5, 0.2, 0.1, 1.5]
+        # ---- the inner world: observed, no particular preference -----------
+        o = self.offset["inner"]
+        if inner is not None:
+            L[o:o + N_INNER_SUMMARY] = inner
+            P[o:o + N_INNER_SUMMARY] = inner
+            W[o:o + N_INNER_SUMMARY] = 0.02
 
         # ---- precision from the predictive layer ---------------------
         if pred is not None and len(pred.precision) == self.dim:
@@ -367,6 +388,8 @@ class EmbodiedHuman:
         self.ambient_humidity = 0.45     # relative humidity of the room (0..1)
         self.ambient_airflow = 0.05      # m/s over the eyes with no walking
         self._behavior_on = True
+        # the internal world (organs, circadian clock, neural mass, memory ...)
+        self.inner = InnerWorld(self) if COMPLEXITY.inner_world else None
 
         # geom -> surface temperature, and geom -> scene-object name
         self.geom_temp = np.full(model.ngeom, 22.0, float)
