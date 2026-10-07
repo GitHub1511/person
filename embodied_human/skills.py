@@ -1623,7 +1623,8 @@ class SkillSystem:
                 self._rec_hold_table = True
                 self._rec_set({"knee_l": 0.10, "knee_r": 0.10,
                                "hip_l_flex": -0.05, "hip_r_flex": -0.05,
-                               "ankle_l_flex": 0.40, "ankle_r_flex": 0.40})
+                               "ankle_l_flex": 0.40, "ankle_r_flex": 0.40,
+                               "spine_bend": 0.50, "chest_bend": 0.30})
                 try:
                     yield from self._rec_hand_walk()
                     self._rec_walked = True
