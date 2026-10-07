@@ -546,7 +546,8 @@ class SkillSystem:
         return np.asarray(self.world.from_ego(*CHAIR_OFFSET), float)
 
     def _deliver_voice(self, raw: str, utt, spk: np.ndarray, dist: float,
-                       amp: float, t_ready: float, dur: float, base: float = 0.0) -> None:
+                       amp: float, t_ready: float, dur: float, base: float = 0.0,
+                       m0: float = 0.0) -> None:
         """Convert an arrived utterance into a HeardEvent (deletion only).
 
         Confidence is computed on the transducer's own terms, so a broken or
@@ -556,8 +557,9 @@ class SkillSystem:
         - bump: how much the live band-energy mean actually moved since the
           utterance was scheduled (gates inaudibility AND doubles as the
           injection-death check -- no transducer movement, no hearing);
-        - M: concurrent transient activity from the adapted drive, i.e. live
-          masking, plus a penalty while the person's own voice is sounding.
+        - m0: transient activity already present at utterance onset (live
+          masking), frozen at schedule time so our own onset is never counted
+          against itself; plus a penalty while the person's own voice sounds.
         """
         try:
             coch = self.agent.receptors.cochlea
@@ -569,15 +571,9 @@ class SkillSystem:
                 bump = 0.0
             if bump <= 1e-4:
                 return                    # the ear did not move: inaudible
-            try:
-                ad = np.asarray(getattr(coch, "adapt", lvl * 0.0), float)
-                drv = np.tanh(2.2 * (lvl - 0.6 * ad))
-                M = float(np.maximum(drv, 0.0).mean())
-            except Exception:
-                M = 0.0
             speaking = bool(self.speech.speaking or self.speech.jaw > 1e-3)
             snr = min(V, 1.0 + float(np.log1p(5000.0 * bump))) \
-                - 2.0 * M - (0.6 if speaking else 0.0)
+                - 1.5 * m0 - (0.6 if speaking else 0.0)
             z = max(-50.0, min(50.0, (snr - 1.75) * 2.2))  # never overflow
             conf = float(1.0 / (1.0 + np.exp(-z)))
             if conf < 0.25:
