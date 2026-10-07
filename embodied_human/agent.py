@@ -780,6 +780,7 @@ class EmbodiedHuman:
             + (float(frame.affective_touch) if frame else 0.0)
             + self.skills.social_pulse,
             novelty=float(fclip(pred.free_energy_norm * 0.8, 0, 1.5)) if pred else 0.0,
+            ocular_discomfort=float(self.ocular.out.discomfort),
             control=float(fclip(0.9 - 0.6 * self.motor.balance_error
                                   - (0.4 if st and st.fallen else 0.0), 0, 1)),
             safety=float(fclip(1.0 - self.motor.balance_error * 1.2, 0, 1)),
@@ -914,7 +915,8 @@ class EmbodiedHuman:
             dominant_emotion=a.dominant_emotion if a else "",
             emotions=a.emotions.copy() if a else np.zeros(N_EMOTIONS),
             neuromodulators=a.neuromodulators.copy() if a else np.zeros(0),
-            policy=self.inference.current.name,
+            policy=(self.behavior.current_name() if self._behavior_on
+                    else self.inference.current.name),
             free_energy=float(self.pred_frame.free_energy) if self.pred_frame else 0.0,
             reward=float(self.reward_frame.total) if self.reward_frame else 0.0,
             drive_pressure=float(self.drive_frame.total_pressure) if self.drive_frame else 0.0,
@@ -930,6 +932,8 @@ class EmbodiedHuman:
         self.receptors.reset()
         self.afferents.reset()
         self.interoception = InteroceptiveSystem(self.cfg, self.meta)
+        self.ocular = OcularSurface(self.cfg.seed)
+        self.behavior.stats = type(self.behavior.stats)(self.behavior.space)
         self.affect.reset()
         self.drives = DriveSystem(self.cfg)
         self.predict.reset()

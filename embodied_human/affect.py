@@ -214,6 +214,7 @@ class AffectInputs:
     predictability: float = 0.5       # 1 - normalised prediction error
     self_evaluation: float = 0.0
     motor_error: float = 0.0
+    ocular_discomfort: float = 0.0    # dry / burning / gritty eyes (see ocular.py)
 
 
 @dataclass
@@ -348,7 +349,8 @@ class AffectSystem:
         # interoceptive colouring: drives press on appraisal directly
         drive_pressure = (0.5 * inp.hunger + 0.5 * inp.thirst + 0.6 * inp.air_hunger
                           + 0.7 * inp.pain + 0.5 * inp.nausea + 0.35 * inp.bladder
-                          + 0.4 * inp.thermal_discomfort + 0.45 * inp.sleepiness)
+                          + 0.4 * inp.thermal_discomfort + 0.45 * inp.sleepiness
+                          + 0.55 * inp.ocular_discomfort)
         raw[A["goal_congruence"]] -= 0.45 * drive_pressure
         raw[A["urgency"]] += 0.25 * drive_pressure
 
