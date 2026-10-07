@@ -1629,7 +1629,8 @@ class SkillSystem:
                     yield from self._rec_hand_walk()
                     self._rec_walked = True
                 finally:
-                    self._rec_hold_table = False
+                    if not self._rec_walked:
+                        self._rec_hold_table = False
             if self._rec_walked:
                 # Bent-over stance reached and unrolled: straight to stand.
                 self.events.append("stand_up: walked up, standing")
