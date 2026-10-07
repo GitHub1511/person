@@ -1822,13 +1822,16 @@ class SkillSystem:
             if self._rec_lunged:
                 # Landed a lunge at the rock peak: front quad presses straight
                 # to standing (strongest motion available: 200 Nm knee).
+                # Coordinate whole body: extend front knee, extend hips, arch spine,
+                # press hands - all together for max vertical force.
                 F = "l" if self._recover_attempts % 2 == 0 else "r"
                 yield from self._rec_hold(
-                    {f"knee_{F}": 0.15, f"hip_{F}_flex": -0.05,
-                     "spine_bend": 0.05, "chest_bend": 0.0,
+                    {f"knee_{F}": 0.10, f"hip_{F}_flex": -0.05,
+                     f"hip_{'r' if F=='l' else 'l'}_flex": -0.05,
+                     "spine_bend": -0.10, "chest_bend": -0.05,
                      "sh_l_flex": 0.20, "sh_r_flex": 0.20,
-                     "elbow_l": -0.40, "elbow_r": -0.40},
-                    10.0, lambda: self._rec_com() > 0.60, "lunge-press")
+                     "elbow_l": -0.30, "elbow_r": -0.30},
+                    10.0, lambda: self._rec_com() > 0.65, "lunge-press")
                 self._rec_pressed = True
                 self.events.append("stand_up: pressed up from lunge")
             elif table_ok:
