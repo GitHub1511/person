@@ -2164,6 +2164,20 @@ class SkillSystem:
                 tucked = True  # big rock: fold knees, land on them
             if tucked and com < 0.18:
                 tucked = False
+            if com > 0.34 and vel > 0.03 and not getattr(self, "_rec_lunged", False):
+                # LUNGE catch: throw one leg forward into a lunge at the rock
+                # peak — lands ~0.5, then the front quad presses to stand.
+                self._rec_lunged = True
+                F, B = lunge_side, ("r" if lunge_side == "l" else "l")
+                self._rec_set({
+                    f"hip_{F}_flex": -1.20, f"knee_{F}": 1.50,
+                    f"hip_{B}_flex": 0.10, f"knee_{B}": 0.20,
+                    f"ankle_{B}_flex": 0.40,
+                    "spine_bend": 0.25, "chest_bend": 0.15,
+                    "sh_l_flex": 0.70, "sh_r_flex": 0.70,
+                    "elbow_l": -0.50, "elbow_r": -0.50})
+                self.events.append("stand_up: lunging at the peak")
+            elif tucked:
             # pump the swing at ~0.8 Hz to rock over the hump; static holds
             # alone rock up part-way and fall back
             pump = 0.55 + 0.45 * float(np.sin(2 * np.pi * 0.8 * (ag.t - t0)))
