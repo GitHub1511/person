@@ -1678,8 +1678,8 @@ class SkillSystem:
                 u = min((ag.t - t0) / 8.0, 1.0)
                 push = max(0.0, float(np.sin(2 * np.pi * 0.55 * (ag.t - t0))))
                 arch = -0.05 - 0.30 * push
-                knee = 0.15 + 1.65 * u
-                hip = 0.25 * push - 1.05 * u
+                knee = 0.15 + 0.65 * u
+                hip = 0.25 * push - 0.45 * u
                 # full-range arm swing: overhead on release, slam down-back
                 # on the push, hands pressing the ground beside the hips
                 arm = 0.90 - 1.80 * push
@@ -1696,7 +1696,7 @@ class SkillSystem:
             self._rec_caught = bool(tucked) and peak > 0.30
             self.events.append("stand_up: cobra up")
             return
-        if peak > 0.26:
+        if peak > 0.24:
             self.events.append(
                 f"stand_up: cobra rocking (peak {peak:.2f} m), continuing")
             return
@@ -1836,6 +1836,10 @@ class SkillSystem:
         best = self._rec_furniture_gap()
         while ag.t - t0 < 14.0:
             if self._rec_furniture_gap() > 0.25:
+                self.events.append("stand_up: clear of furniture")
+                return
+            if self._rec_chest_face_z() < -0.50 or self._rec_com() > 0.35:
+                # rocked prone/high while extracting: that counts, roll on
                 self.events.append("stand_up: clear of furniture")
                 return
             pump = 0.55 + 0.45 * float(np.sin(2 * np.pi * 0.8 * (ag.t - t0)))
