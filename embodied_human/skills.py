@@ -1587,6 +1587,7 @@ class SkillSystem:
                  "spine_bend": 0.40, "chest_bend": 0.25,
                  "elbow_l": -1.00, "elbow_r": -1.00},
                 0.1, lambda: False, "curl", proceed=lambda: True)
+            yield from self._rec_extract()
             yield from self._rec_roll()
             if self._rec_chest_face_z() > 0.50:
                 yield from self._rec_situp()

@@ -28,6 +28,10 @@ TIPS = {
 
 def knock_down(ag, tip: str) -> None:
     ra = ag.meta.root_qpos_addr
+    # Open floor, well clear of the table (0,-0.82) and shelf: pure floor
+    # recovery, no furniture interference. Furniture cases are separate.
+    ag.data.qpos[ra] = 1.2
+    ag.data.qpos[ra + 1] = 0.6
     ag.data.qpos[ra + 2] = 0.45
     ag.data.qpos[ra + 3:ra + 7] = TIPS[tip] / np.linalg.norm(TIPS[tip])
     ag.data.qvel[:] = 0.0
