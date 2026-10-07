@@ -26,7 +26,7 @@ geometry and therefore the MuJoCo model are generated from it. Choose it with
 | internal dynamic variables | – | 15,066 | 36,932 | 88,892 |
 | × the original 136 | – | 111 | 272 | 654 |
 | neural-mass units | – | 4,096 | 12,288 | 32,768 |
-| synaptic weights in the neural mass (units × in-degree) | 8,192 | 131,072 | 589,824 | 2,097,152 |
+| synaptic weights in the neural mass (units × in-degree) | – | 131,072 | 589,824 | 2,097,152 |
 | motor units | – | 1,664 | 3,328 | 6,656 |
 | chemistry analytes | – | 240 | 480 | 960 |
 | episodic-store values | – | 137,216 | 405,504 | 1,073,152 |
