@@ -2396,7 +2396,7 @@ class SkillSystem:
             prev = com
             # Check for catch BEFORE checking for fully prone
             # Body rocks up onto folded knees before going fully prone
-            if tucked and com > 0.30:
+            if tucked and com > 0.25:
                 # caught a big rock onto the folded knees: skip ahead
                 self._rec_caught = True
                 self.events.append("stand_up: caught roll onto knees")
