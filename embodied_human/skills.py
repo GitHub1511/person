@@ -740,6 +740,11 @@ class SkillSystem:
             self.queue.clear()
             cur = self.current
             self.current = None
+            # Defensive: if the generator's finally never runs (see below),
+            # recovery must not own the body forever.
+            self.recovery_active = False
+            self._rec_hold_table = False
+            self._rec_climbing = False
             if cur is not None:
                 # Close the generator so try/finally blocks inside actions
                 # (e.g. stand_up cleanup) actually run on cancel.
