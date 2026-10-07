@@ -509,6 +509,21 @@ class SkillSystem:
         for s in "lr":
             self.arm[s].update()
         self._update_gaze()
+        # Fall recovery reflex: the body tries to get back up on its own when
+        # down and idle, without waiting for the mind. The mind (or AZR) sees
+        # the resulting events and verified outcomes like any other action.
+        try:
+            st = ag.state
+            if (st is not None and st.fallen and not self.recovery_active
+                    and self.current is None and not self.queue
+                    and ag.t - self._auto_recover_t > 6.0):
+                self._auto_recover_t = ag.t
+                self._recover_attempts += 1
+                self.events.append(
+                    f"fallen: trying to get back up (attempt {self._recover_attempts})")
+                self._enqueue("stand_up", (), self._a_stand_up())
+        except Exception:
+            pass
 
     @staticmethod
     def _fmt(name, args) -> str:
@@ -1531,6 +1546,113 @@ class SkillSystem:
             self.crouch += float(np.clip(depth - self.crouch, -0.6 * TICK, 0.6 * TICK))
             yield
         self.crouch = depth
+
+    def _a_stand_up(self):
+        """Staged fall recovery: tuck -> kneel -> half-kneel -> stand.
+
+        Drives the whole body through postures via ``recovery_targets`` (which
+        beat every other controller in ``override_target``) and lets the
+        contacts support each stage. Success is verified, not assumed: the
+        body must be unstably-high (COM > 0.72 m) and not fallen at the end,
+        after which the whole-body stance hold takes over again.
+        """
+        ag = self.agent
+        nom = self.q_nom_map
+        # free the hands for pushing and stop everything else
+        for s in "lr":
+            if self.held[s] is not None:
+                try:
+                    self.grip(s, self.held[s], False)
+                except Exception:
+                    pass
+                self.held[s] = None
+            self.arm[s].stop()
+        ag.gait.stop()
+        self.gesture_active = False
+        self.recovery_active = True
+
+        def pose(**over):
+            p = dict(nom)
+            p.update(over)
+            return p
+
+        tuck, kneel, half, stand = {}, {}, {}, {}
+        for s in "lr":
+            tuck.update({f"knee_{s}": 1.60, f"hip_{s}_flex": -1.30,
+                         f"ankle_{s}_flex": -0.50, f"sh_{s}_flex": 0.90,
+                         f"sh_{s}_abd": 0.25, f"elbow_{s}": -0.90})
+            kneel.update({f"knee_{s}": 1.70, f"hip_{s}_flex": -1.10,
+                          f"ankle_{s}_flex": -0.60, f"sh_{s}_flex": 0.70,
+                          f"sh_{s}_abd": 0.20, f"elbow_{s}": -0.70})
+            half.update({f"sh_{s}_flex": 0.50, f"sh_{s}_abd": 0.15,
+                         f"elbow_{s}": -0.60})
+            stand.update({f"knee_{s}": nom.get(f"knee_{s}", 0.10),
+                          f"hip_{s}_flex": nom.get(f"hip_{s}_flex", 0.0),
+                          f"ankle_{s}_flex": nom.get(f"ankle_{s}_flex", 0.0),
+                          f"sh_{s}_flex": nom.get(f"sh_{s}_flex", 0.02),
+                          f"sh_{s}_abd": nom.get(f"sh_{s}_abd", 0.0),
+                          f"elbow_{s}": nom.get(f"elbow_{s}", -0.30)})
+        tuck.update({"spine_bend": 0.35, "chest_bend": 0.20})
+        kneel.update({"spine_bend": 0.15, "chest_bend": 0.10})
+        half.update({"spine_bend": 0.08, "chest_bend": 0.05,
+                     "knee_l": 0.40, "hip_l_flex": -0.30,
+                     "knee_r": 1.60, "hip_r_flex": -1.10,
+                     "ankle_l_flex": -0.15, "ankle_r_flex": -0.55})
+        stand.update({"spine_bend": nom.get("spine_bend", 0.02),
+                      "chest_bend": nom.get("chest_bend", 0.0)})
+
+        stages = [(pose(**tuck), 3.0), (pose(**kneel), 3.5),
+                  (pose(**half), 3.5), (pose(**stand), 4.0)]
+        try:
+            d = ag.data
+            cur = {nm: float(d.qpos[ag.meta.qpos_addr[nm]])
+                   for nm in stand if nm in ag.meta.qpos_addr}
+            for tgt, dur in stages:
+                n = max(int(dur / TICK), 1)
+                start = dict(cur)
+                for i in range(n):
+                    u = (i + 1) / n
+                    u = u * u * (3 - 2 * u)
+                    for nm, tv in tgt.items():
+                        if nm in start:
+                            self.recovery_targets[nm] = (
+                                (1 - u) * start[nm] + u * tv)
+                        else:
+                            self.recovery_targets[nm] = tv
+                    if self.agent.state is not None and not self.agent.state.fallen \
+                            and tgt is stand and i > n // 2:
+                        break  # already up: stop driving, let stance hold
+                    yield
+                cur = {nm: float(self.recovery_targets.get(nm, cur.get(nm, 0.0)))
+                       for nm in cur}
+            # verify: hold the stand pose and watch the COM
+            ok_until = None
+            t0 = ag.t
+            while ag.t - t0 < 4.0:
+                for nm in stand:
+                    if nm in ag.meta.qpos_addr:
+                        self.recovery_targets[nm] = stand[nm]
+                st = self.agent.state
+                com_z = float(st.com[2]) if st is not None else 0.0
+                if st is not None and not st.fallen and com_z > 0.72:
+                    if ok_until is None:
+                        ok_until = ag.t
+                    if ag.t - ok_until > 1.0:
+                        break
+                else:
+                    ok_until = None
+                yield
+            st = self.agent.state
+            com_z = float(st.com[2]) if st is not None else 0.0
+            if st is None or st.fallen or com_z <= 0.70:
+                raise ActionFailed(
+                    f"still down (COM {com_z:.2f} m) after trying to stand")
+            ag.gait.fallen = False  # let the stance hold take over again
+            self.events.append(
+                f"got back up (COM {com_z:.2f} m, attempt {self._recover_attempts})")
+        finally:
+            self.recovery_active = False
+            self.recovery_targets = {}
 
     def _a_gesture(self, name, hand):
         dur, fn, default_side = GESTURES[name]
