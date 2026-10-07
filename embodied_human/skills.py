@@ -1578,6 +1578,7 @@ class SkillSystem:
         ag.gait.stop()
         self.gesture_active = False
         self.recovery_active = True
+        self._rec_caught = False
         try:
             # Curl into a ball first: always feasible (no ground leverage
             # needed), and a balled body rolls far easier than a sprawled one.
@@ -1658,6 +1659,7 @@ class SkillSystem:
             com = self._rec_com()
             peak = max(peak, com)
             if com > 0.40:
+                self._rec_caught = bool(tucked)
                 self.events.append("stand_up: cobra up")
                 return
             vel = (com - prev) / max(TICK, 1e-6)
@@ -1692,6 +1694,7 @@ class SkillSystem:
                     "ankle_l_flex": 0.30, "ankle_r_flex": 0.30})
             yield
         if self._rec_com() > 0.30 or peak > 0.30:
+            self._rec_caught = bool(tucked) and peak > 0.30
             self.events.append("stand_up: cobra up")
             return
         if peak > 0.26:
