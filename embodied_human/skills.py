@@ -2251,8 +2251,6 @@ class SkillSystem:
         raise ActionFailed(f"stand_up: cobra made no progress "
                            f"(COM {tail_com:.2f} m, peak {peak:.2f} m)")
 
-    return
-
     def _rec_hand_target_forward(self, side: str) -> np.ndarray:
         """Target position for hand in crawling: forward and on the ground."""
         hand_pos = self._rec_hand_home(side)
