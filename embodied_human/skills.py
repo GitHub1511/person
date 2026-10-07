@@ -2145,6 +2145,7 @@ class SkillSystem:
         prev = self._rec_com()
         peak = prev
         tucked = False
+        lunge_side = "l" if self._recover_attempts % 2 == 0 else "r"
         while ag.t - t0 < 16.0:
             face = self._rec_chest_face_z()
             com = self._rec_com()
