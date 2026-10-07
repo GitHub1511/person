@@ -269,10 +269,35 @@ def _quat_from_z(z: np.ndarray) -> np.ndarray:
     return np.concatenate([[np.cos(ang / 2)], axis * np.sin(ang / 2)])
 
 
+# Eyelids: thin skin-coloured boxes in front of each eye, moved at runtime by
+# ocular.EyeRig (they are not collision geoms).  Heights are the *open* pose.
+LID_Y = -0.1128
+LID_HALF_X = 0.0155
+LID_UP_HALF_Z = 0.0075
+LID_LO_HALF_Z = 0.0035
+
+
+def eyelid_xml() -> list[str]:
+    from .skeleton import EYE_X, EYE_Z, SKIN
+    out = []
+    rgba = " ".join(f"{v:.3g}" for v in SKIN)
+    for s, sx in (("l", 1.0), ("r", -1.0)):
+        up_z = EYE_Z + 0.0095 + LID_UP_HALF_Z
+        lo_z = EYE_Z - 0.0095 - LID_LO_HALF_Z
+        for nm, z, hz in (("up", up_z, LID_UP_HALF_Z), ("lo", lo_z, LID_LO_HALF_Z)):
+            out.append(
+                f'<geom name="lid_{nm}_{s}" type="box" pos="{EYE_X * sx:.5f} {LID_Y:.5f} {z:.5f}" '
+                f'size="{LID_HALF_X} 0.0022 {hz}" rgba="{rgba}" mass="1e-7" '
+                f'contype="0" conaffinity="0" group="1"/>')
+    return out
+
+
 def _geom_xml(g: Geom, bone_name: str) -> str:
     a = np.asarray(g.a, float)
     b = np.asarray(g.b, float)
     ct, ca = COLLISION[collision_category(bone_name)]
+    if g.name.startswith(("vis_", "eyeball")):
+        ct = ca = 0                       # eyes are drawn, not collided
     friction = g.friction
     extra = ""
     if g.name.startswith(("footbody", "toebox")):
@@ -387,8 +412,12 @@ def build_xml(cfg: SimConfig, include_touch_sensors: bool = True) -> str:
                 add(f'{pad}  <site name="{lname}" pos="{_f(lpos)}"{qattr} '
                     f'size="0.008" group="3" rgba="0.2 0.7 1.0 0.5"/>')
         if bone.name == "head":
-            add(f'{pad}  <camera name="egocentric" pos="0 -0.09 0.075" '
+            # in front of the face (it used to sit inside the face box and
+            # rendered the inside of the head)
+            add(f'{pad}  <camera name="egocentric" pos="0 -0.121 0.078" '
                 f'xyaxes="1 0 0 0 0 1" fovy="70"/>')
+            for lid_xml in eyelid_xml():
+                add(f'{pad}  {lid_xml}')
         for idx in skin.TAXELS_BY_BONE.get(bone.name, []):
             t = skin.TAXELS[idx]
             add(f'{pad}  <site name="{t.name}" class="skin_site" '

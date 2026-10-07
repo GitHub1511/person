@@ -143,6 +143,11 @@ SKIN = (0.87, 0.72, 0.63, 1.0)
 SKIN_DARK = (0.78, 0.62, 0.54, 1.0)
 MUCOUS = (0.83, 0.45, 0.45, 1.0)
 SCLERA = (0.95, 0.95, 0.96, 1.0)
+IRIS = (0.32, 0.22, 0.14, 1.0)
+PUPIL = (0.02, 0.02, 0.02, 1.0)
+
+# Eye socket position in the head frame, and the lid geometry built around it
+EYE_X, EYE_Y, EYE_Z = 0.030, -0.0955, 0.078
 
 # --------------------------------------------------------------------------
 # Torque limits by joint family (Nm) - from isokinetic dynamometry literature
@@ -251,8 +256,11 @@ def build_bones() -> list[Bone]:
     ))
 
     for s, sx in (("l", 1.0), ("r", -1.0)):
+        # The eyes used to sit *inside* the face box (y = -0.070 vs a face front
+        # at -0.105) and could not be seen.  They now bulge from the face, with
+        # an iris and a pupil (visual only), and the lids in build_model.py.
         bones.append(Bone(
-            f"eye_{s}", "head", (0.030 * sx, -0.070, 0.075), side=s, rgba=SCLERA,
+            f"eye_{s}", "head", (EYE_X * sx, EYE_Y, EYE_Z), side=s, rgba=SCLERA,
             joints=[
                 hinge(f"eye_{s}_yaw", (0, 0, 1), -0.85, 0.85, T["eye"],
                       armature=1e-5, damping=0.005, frictionloss=0.001),
@@ -261,7 +269,11 @@ def build_bones() -> list[Bone]:
                       armature=1e-5, damping=0.005, frictionloss=0.001),
             ],
             geoms=[sphere((0, 0, 0), 0.0122, MASSES["eye"], rgba=SCLERA,
-                          name=f"eyeball_{s}")],
+                          name=f"eyeball_{s}"),
+                   sphere((0, -0.0085, 0), 0.0070, MASSES["eye"] * 0.02,
+                          rgba=IRIS, name=f"vis_iris_{s}"),
+                   sphere((0, -0.0128, 0), 0.0030, MASSES["eye"] * 0.01,
+                          rgba=PUPIL, name=f"vis_pupil_{s}")],
         ))
 
     # ---------------- arms -------------------------------------------------
