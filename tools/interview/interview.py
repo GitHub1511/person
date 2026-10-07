@@ -333,7 +333,8 @@ def run_forever(duration_s: float = 0.0, ask_first: bool = False) -> int:
                     st = _state()
                     if got:
                         q, model, rationale = got
-                        mind.interview_ask(q, model=model, rationale=rationale)
+                        mind.interview_ask(q, model=model, rationale=rationale,
+                                             where="chair", level=1.0)
                         st.update(last_asked_wall=time.time(), n_asked=st.get("n_asked", 0) + 1,
                                   last_model=model, last_question=q)
                         _save_state(st)

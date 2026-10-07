@@ -138,7 +138,11 @@ TASK = (
     "it. Sound that goes through say(...) starts with your jaw opening and "
     "comes back to your own ears from the mouth. Repeating arriving sound back "
     "through your mouth does not answer it; answering starts from what you "
-    "felt and wanted while hearing it, or from staying quiet. "
+    "felt and wanted while hearing it, or from staying quiet. What arrives as "
+    "a heard voice passed through toy-model ears first: distance, direction "
+    "and noise decide how much survives, shown with a confidence. Low "
+    "confidence means you misheard or missed it -- never repeat [...] parts "
+    "as if heard. "
     "If you have fallen (on the floor), call stand_up() to get back up. "
     "The <answer> must contain ONLY those calls, no prose. Example:\n"
     "<answer>\nlook_at(\"apple\")\nwalk_to(\"table\")\n</answer>"
@@ -774,14 +778,18 @@ class Mind:
     # lands in the instance's own .txt file (see instance_log.py).
     # ------------------------------------------------------------------
     def interview_ask(self, question: str, *, model: str = "",
-                      rationale: str = "") -> None:
-        """Pose one interview question: recorded, heard, and thought about."""
+                      rationale: str = "", where=None, level: float = 1.0) -> None:
+        """Pose one interview question: recorded, heard, and thought about.
+
+        `where` fixes the speaker geometry on the record ("chair" for the
+        documented interview chair); `level` is voice loudness (~0.3 whisper).
+        """
         q = " ".join(str(question or "").split())[:300]
         if not q:
             return
         self.instance_log.interview(q, model=model, rationale=rationale,
                                     sim_t=self.agent.t)
-        self.agent.skills.hear(q)
+        self.agent.skills.hear(q, where=where, level=level)
         self.poke()
 
     def _drain_said(self) -> None:
@@ -907,8 +915,18 @@ class Mind:
                                 "heard": heard, "events": events, "raw": raw})
         self.log(f"[mind] {reply.think}")
         # ---- instance transcript file ----
+        # The .txt records the percept (degraded words + acoustic metadata).
+        # The raw experimenter string is deliberately NOT written here: this
+        # file is what gets re-read for science, and ground truth must not
+        # leak into it.  (Raw lives only on the in-memory event object.)
         for h in heard:
-            self.instance_log.heard(h, sim_t=ag.t)
+            d = _heard_dict(h) if not isinstance(h, dict) else h
+            n_words = len(getattr(h, "raw", "").split()) if not isinstance(h, dict) else 0
+            self.instance_log.heard(
+                d.get("text", ""), sim_t=ag.t,
+                source=f"az {d.get('az_deg', 0.0):.0f}deg "
+                       f"dist {d.get('dist_m', 0.0):.2f}m conf {d.get('conf', 1.0):.2f} "
+                       f"masked {d.get('masked', 0)}/{n_words}")
         if events:
             self.instance_log.event("; ".join(events)[:600], sim_t=ag.t)
         self.instance_log.thought(reply.think, sim_t=ag.t)
