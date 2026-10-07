@@ -338,6 +338,9 @@ class SimConfig:
     viewer: bool = False
     log_every: int = 5
     out_dir: Path = OUT_DIR
+    # Identity: every simulation instance gets its own identifier, used for
+    # its thought/action transcript file.  Empty means "mint one at startup".
+    instance_id: str = ""
 
     def all_rates(self) -> dict[str, float]:
         return {

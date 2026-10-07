@@ -640,7 +640,8 @@ class Mind:
     """Runs the model in a background thread and drives the skill system."""
 
     def __init__(self, agent, backend: Backend, *, min_interval=2.5, idle_interval=7.0,
-                 max_new_tokens=320, log=None):
+                 max_new_tokens=320, log=None, instance_id: str | None = None,
+                 instance_log_dir=None):
         self.agent = agent
         self.backend = backend
         self.percept = PerceptBuilder(agent)
@@ -662,6 +663,19 @@ class Mind:
         self._wake = threading.Event()
         self.log = log or (lambda *a, **k: None)
         self.transcript: list[dict] = []
+        # Every instance gets its own append-only thought/action transcript file.
+        from .instance_log import InstanceLog, sanitize_instance_id
+        iid = instance_id or getattr(agent, "instance_id", "") or ""
+        self.instance_id = sanitize_instance_id(iid)
+        agent.instance_id = self.instance_id
+        log_dir = instance_log_dir if instance_log_dir is not None else \
+            getattr(getattr(agent, "cfg", None), "out_dir", ".")
+        from pathlib import Path as _P
+        self.instance_log = InstanceLog(
+            self.instance_id, _P(log_dir) / "instances",
+            seed=getattr(getattr(agent, "cfg", None), "seed", None),
+            backend=getattr(backend, "name", type(backend).__name__))
+        self._said_seen = 0               # watermark into speech.history
 
     # ------------------------------------------------------------------
     def start(self) -> None:

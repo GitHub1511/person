@@ -417,6 +417,8 @@ class EmbodiedHuman:
         self._a_idx = np.array([meta.name_to_actuator[n] for _, n, _ in meta.joint_order])
 
         # ---- runtime state ------------------------------------------
+        from .instance_log import sanitize_instance_id
+        self.instance_id = sanitize_instance_id(self.cfg.instance_id)
         self.t = 0.0
         self.step_count = 0
         self.acc = {k: 0.0 for k in ("receptor", "afferent", "interoception",
@@ -1016,6 +1018,7 @@ class EmbodiedHuman:
     # ------------------------------------------------------------------
     def describe(self) -> dict:
         return {
+            "instance_id": self.instance_id,
             "model": {
                 "nq": self.model.nq, "nv": self.model.nv, "nu": self.model.nu,
                 "nbody": self.model.nbody, "ngeom": self.model.ngeom,
