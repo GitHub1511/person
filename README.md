@@ -4,7 +4,7 @@ A simulated person, not a policy. This is a humanoid model in MuJoCo with rich i
 
 ## Module Inventory
 
-**embodied_human/** (39 files, 18 467 lines total)
+**embodied_human/** (39 files, 18 716 lines total)
 - `__init__.py`: 3 lines – Embodied human: a simulated person, not a policy.
 - `_fast.py`: 16 lines – (unparseable: SyntaxError)
 - `active_inference.py`: 410 lines – Active inference: choosing what to do by minimising expected free energy.
@@ -26,7 +26,7 @@ A simulated person, not a policy. This is a humanoid model in MuJoCo with rich i
 - `interoception.py`: 425 lines – Interoception: the sense of the internal state of the body.
 - `intrinsic.py`: 120 lines – Intrinsic motivation: the reward decomposition.
 - `locomotion.py`: 740 lines – Bipedal walking.
-- `mind.py`: 939 lines – (unparseable: SyntaxError)
+- `mind.py`: 995 lines – (unparseable: SyntaxError)
 - `motor.py`: 540 lines – Motor system: from intention to torque.
 - `ocular.py`: 429 lines – The ocular surface: why the eyes need to blink.
 - `plots.py`: 518 lines – Visualisation.
@@ -35,7 +35,7 @@ A simulated person, not a policy. This is a humanoid model in MuJoCo with rich i
 - `record.py`: 294 lines – Episode recording.
 - `senses_ext.py`: 363 lines – Populations of sensory cells, not single channels.
 - `skeleton.py`: 465 lines – (unparseable: SyntaxError)
-- `skills.py`: 2406 lines – Motor skills: everything the body can *do* on purpose.
+- `skills.py`: 2599 lines – Motor skills: everything the body can *do* on purpose.
 - `skin.py`: 571 lines – Whole‑body artificial skin.
 - `speech.py`: 177 lines – Speech: the mouth, and the words above the head.
 - `state.py`: 113 lines – Shared state snapshot.
@@ -57,10 +57,11 @@ A simulated person, not a policy. This is a humanoid model in MuJoCo with rich i
 **Root scripts**
 - `run_mind.py`
 - `run_sim.py`
-- 31 diagnostic scripts: `diag_app.py`, `diag_azr_balance.py`, `diag_azr_live.py`, `diag_balance.py`, `diag_balance2.py`, `diag_bubbles.py`, `diag_cobra.py`, `diag_fall.py`, `diag_getup.py`, `diag_getup_hands.py`, `diag_getup_shots.py`, `diag_getup_shots.py`, `diag_handwalk.py`, `diag_hold.py`, `diag_long.py`, `diag_mind_server.py`, `diag_mind_smoke.py`, `diag_policy.py`, `diag_push2.py`, `diag_robust.py`, `diag_robust2.py`, `diag_skills.py`, `diag_slip.py`, `diag_stand2.py`, `diag_sweep.py`, `diag_table_climb.py`, `diag_walk.py`, `diag_walk_eval.py`, `diag_walk_render.py`, `diag_walk_sweep.py`, `diag_walk_turn.py`, `diag_wbc.py`
+- 32 diagnostic scripts: `diag_app.py`, `diag_azr_balance.py`, `diag_azr_live.py`, `diag_balance.py`, `diag_balance2.py`, `diag_bubbles.py`, `diag_cobra.py`, `diag_fall.py`, `diag_getup.py`, `diag_getup_hands.py`, `diag_getup_shots.py`, `diag_handwalk.py`, `diag_hold.py`, `diag_long.py`, `diag_mind_server.py`, `diag_mind_smoke.py`, `diag_policy.py`, `diag_push2.py`, `diag_robust.py`, `diag_robust2.py`, `diag_skills.py`, `diag_slip.py`, `diag_stand2.py`, `diag_sweep.py`, `diag_table_climb.py`, `diag_walk.py`, `diag_walk_eval.py`, `diag_walk_render.py`, `diag_walk_sweep.py`, `diag_walk_turn.py`, `diag_wbc.py`
 
-**README.md** – present (56 199 bytes)
+**README.md** – present (5 316 bytes)
 
 ## How to Run
 
-1. Install dependencies:
+1. Install the required Python packages (see `requirements.txt` or the project’s setup instructions).
+2. Run a simulation with the base script:
