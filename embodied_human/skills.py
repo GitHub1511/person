@@ -1820,6 +1820,8 @@ class SkillSystem:
                 self._rec_pressed = True
                 self.events.append("stand_up: pressed up from lunge")
             elif table_ok:
+                self._rec_caught = True
+                self.events.append("stand_up: table climb worked, kneeling")
             if self._rec_caught:
                 if not table_ok:
                     # Caught a big roll onto the folded knees: straight to kneel.
