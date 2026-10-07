@@ -12,7 +12,7 @@ Working rules:
 - Respect `tools/openrouter_helper/prompts/rules.md` (memory/time budget, no new dependencies, complexity
   knobs, off at `base`).
 - Before you finish run: `bash tools/openrouter_helper/helper.sh verify`  -- it compiles what you changed,
-  imports the package at `base` and `rich`, runs a 60 s smoke simulation and prints PASS or FAIL with the
+  imports the package at `base` and `rich`, runs a 20 s smoke simulation and prints PASS or FAIL with the
   reason. If it fails, fix the cause and run it again. If you cannot fix it, run
   `bash tools/openrouter_helper/helper.sh rollback` to return to the snapshot taken before you started.
 - Finish with a short report: what you changed, what the verification printed, what you measured.

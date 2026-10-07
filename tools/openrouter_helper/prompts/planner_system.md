@@ -26,6 +26,8 @@ Answer in EXACTLY this format, nothing before or after:
 TITLE: <six to twelve words>
 RATIONALE: <3-6 sentences: what the data shows, why this step, what it should change>
 FILES_TO_READ: <comma-separated repo-relative paths, at most 10, the coder needs in full>
+WEB: <optional: up to 4 public http(s) URLs of documentation the coder will need (MuJoCo, numpy, a paper);
+     the helper fetches them as plain text and attaches excerpts. Leave blank if none.>
 RISKS: <what could break and how the coder should check>
 ACCEPTANCE: <3-8 bullet lines, each a measurable check, e.g. "ms per step at base <= 2.5">
 CODER_PROMPT:

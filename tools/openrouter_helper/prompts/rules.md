@@ -18,9 +18,9 @@
   `embodied_human/`, `tools/` (not `tools/openrouter_helper/`), and the project root for `run_*.py`,
   `diag_*.py`, `README.md`. You cannot delete files. You cannot touch `.env`, `.git`, `orchestrator/`,
   `AI_LOG.txt`, or the helper itself.
-- You have **no shell and no network**. You cannot run code. Your only output is the edit blocks, and the
-  helper will compile them, import the package, run a smoke simulation and **revert everything if any
-  check fails**. So: be exact, reuse names that exist, and keep every change importable.
+- You work with a shell in the project directory, so you can and should run code and tests yourself. The helper
+  will additionally compile what you changed, import the package, run a smoke simulation and **revert everything
+  if a check fails**. Keep every change importable.
 - Do not break public interfaces other modules use (`LatentSpec.build` argument order, `BodyState`
   fields, `ReceptorFrame` fields, `Behavior` fields, `PERSON_COMPLEXITY` levels). Add, do not rename.
 - Do not add anything that asks for credentials, makes network calls, or runs subprocesses.
@@ -28,6 +28,6 @@
 ## What the checks do (so you can pass them)
 1. every touched `.py` file must `py_compile`;
 2. `import embodied_human.agent` must work at `PERSON_COMPLEXITY=base` and at `rich`;
-3. a 60-second smoke run (`tools/openrouter_helper/smoke.py`) must complete with no exception, no NaN in the
+3. a 20-second smoke run (`tools/openrouter_helper/smoke.py`) must complete with no exception, no NaN in the
    latent, the person not fallen, and no more than 25 % slower than the recorded baseline;
 4. if you changed `tools/` scripts they are only compiled.
