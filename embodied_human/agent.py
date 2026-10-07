@@ -679,6 +679,58 @@ class EmbodiedHuman:
         self.step_count += 1
 
     # ------------------------------------------------------------------
+    def _ocular_inputs(self) -> OcularInputs:
+        """What the rest of the person tells its eyes."""
+        s = self.interoception.s
+        a = self.affect_frame
+        sk = self.skills
+        g = IDX
+        em = (lambda n: float(a.emotion(n))) if a is not None else (lambda n: 0.0)
+        ea = self.meta.qpos_addr
+        eye_p = float(self.data.qpos[ea["eye_l_pitch"]]) if "eye_l_pitch" in ea else 0.0
+        neck_b = float(self.data.qpos[ea["neck_bend"]]) if "neck_bend" in ea else 0.0
+        gaze_up = float(np.clip(-(eye_p + 0.5 * neck_b) / 0.6, -1.0, 1.0))
+        # visual concentration: acting on an object or looking at something holds attention
+        attn = 0.25 + 0.25 * em("curiosity")
+        if sk.gaze is not None:
+            attn = max(attn, 0.60)
+        if sk.busy:
+            attn = max(attn, 0.85)
+        speaking = 1.0 if (sk.speech.speaking or self.behavior.voice > 0.15) else 0.0
+        walk = float(self.gait.diag.speed) if self.gait.active else 0.0
+        # hands near the eyes: a protective blink on approach, wiping when touching
+        eyes_mid = self.data.xpos[self.meta.body_ids["head"]] + self.data.xmat[
+            self.meta.body_ids["head"]].reshape(3, 3) @ np.array([0.0, -0.11, 0.078])
+        dist = min(float(np.linalg.norm(sk.arm[sd].site_world(self.data)[0] - eyes_mid))
+                   for sd in "lr")
+        touching = sk.touching
+        wipe = 1.0 if (touching and touching[0] == "eyes" and touching[3] == "act") else 0.0
+        hand_near = 0.0 if wipe else float(np.clip((0.14 - dist) / 0.07, 0.0, 1.0))
+        arousal = float(a.arousal) if a is not None else 0.25
+        lum = float(np.clip(self.luminance, 0.05, 1.0)) if self.receptors.visual.enabled else 0.6
+        return OcularInputs(
+            humidity=self.ambient_humidity,
+            airflow=self.ambient_airflow + 0.9 * walk,
+            luminance=lum,
+            gaze_up=gaze_up,
+            attention=attn,
+            arousal=arousal,
+            sadness=em("sadness"),
+            anxiety=em("anxiety"),
+            fatigue=float(np.clip(s[g["central_fatigue"]], 0, 1)),
+            sleepiness=float(np.clip(s[g["sleepiness"]], 0, 1)),
+            hydration=float(s[g["hydration"]]),
+            speaking=speaking,
+            startle=1.0 if (self.state is not None and self.state.fallen) else 0.0,
+            hand_near=hand_near,
+            dopamine=float(a.neuromodulator("dopamine_tonic")) if a is not None else 0.35,
+            sensitisation=float(np.clip(s[g["central_sensitisation"]], 0, 1)),
+            parasympathetic=float(np.clip(0.85 - 0.6 * arousal, 0.1, 1.0)),
+            temperature=float(s[g["skin_temp_mean"]]) + 1.0,
+            wipe=wipe,
+        )
+
+    # ------------------------------------------------------------------
     def _contact_thermal(self, sign: int) -> float:
         """Mean temperature mismatch for warming (+) or cooling (-) contact.
 
@@ -761,6 +813,14 @@ class EmbodiedHuman:
         self.precision = precision
 
         self.pred_frame = self.predict.observe(latent, self.action)
+
+        if self._behavior_on and self.behavior.enabled:
+            # The open-ended behaviour layer owns the body (see behavior_exec.py);
+            # it decides at ~2 Hz on its own clock.  The learned forward model is
+            # still fed what was actually commanded.
+            self.action = self.behavior.cmd.copy()
+            self.last_inference_info = self.behavior.summary()
+            return
 
         temperature = float(fclip(
             0.6 + 1.2 * self.affect_frame.arousal
