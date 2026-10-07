@@ -345,6 +345,18 @@ class BehaviorExecutor:
             self._skill_started = True
         elif b.intent is not None and not sk.busy:
             mode, obj = b.intent
+            # never walk off to fetch something: if it is out of reach, only look
+            try:
+                spec = sk.resolve(obj)
+                if spec is None or spec[0] != "object":
+                    mode = "look"
+                else:
+                    p = sk.world.obj_pos(spec[1])
+                    near = min(float(np.linalg.norm(p - sk._shoulder_pos(s))) for s in "lr")
+                    if near > 0.62:
+                        mode = "look"
+            except Exception:
+                mode = "look"
             try:
                 if mode == "look":
                     sk.api_look_at(obj)
