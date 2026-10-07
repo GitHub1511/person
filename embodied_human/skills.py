@@ -2193,12 +2193,15 @@ class SkillSystem:
                 self._rec_lunged = True
                 self.events.append("stand_up: lunged, pressing up")
                 return
-            if not lunged and not tucked and com > 0.30 and vel > 0.03:
+            if not lunged and com > 0.30 and vel > 0.03:
                 # LUNGE catch: throw one leg forward into a lunge at the
                 # rock peak — lands ~0.5, then the front quad presses.
+                # Checked BEFORE tuck so a rising rock always lunges.
                 lunged = True
                 self._rec_lunged = True
                 self.events.append("stand_up: lunging at the peak")
+            elif not tucked and com > 0.28 and vel > 0.03:
+                tucked = True  # big rock: fold knees, land on them
             elif not tucked and com > 0.28 and vel > 0.03:
                 tucked = True  # big rock: fold knees, land on them
             if tucked and com < 0.18:
