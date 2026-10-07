@@ -319,8 +319,13 @@ class Gait:
         if com[2] < 0.5 and self.mode != "off":
             self.fallen = True
             self.mode = "off"
-        if self.mode == "off" and (self.cmd_active or self.hold_stance) and not self.fallen:
-            self._begin(d)
+        if self.mode == "off" and (self.cmd_active or self.hold_stance):
+            if self.fallen and float(com[2]) > 0.62:
+                # The body is back up (e.g. a get-up skill lifted it):
+                # unlatch the fall and let the stance hold take over again.
+                self.fallen = False
+            if not self.fallen:
+                self._begin(d)
         if self.mode == "off":
             self.diag.mode = "off"
             return np.zeros(self.n), np.zeros(self.n, bool)
