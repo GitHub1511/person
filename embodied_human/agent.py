@@ -550,6 +550,17 @@ class EmbodiedHuman:
             self.acc["afferent"] = 0.0
             self.aff = self.afferents.process(self.frame, state, self.data.ctrl)
 
+        # ---- 100 Hz : the eyes -----------------------------------------
+        self.acc["ocular"] += dt
+        if self.acc["ocular"] >= 0.01:
+            dt_o = self.acc["ocular"]
+            self.acc["ocular"] = 0.0
+            lid = self.behavior.current.lid_aperture if self._behavior_on else None
+            oc = self.ocular.update(dt_o, self._ocular_inputs(), aperture_cmd=lid)
+            self.receptors.visual.eye_state = {"aperture": float(np.mean(oc.aperture)),
+                                               "blur": oc.blur}
+            self.eye_rig.apply(oc.aperture, self.receptors.visual.pupil, oc.redness)
+
         # ---- 100 Hz : interoception ----------------------------------
         self.acc["interoception"] += dt
         if self.acc["interoception"] >= 1.0 / cfg.rates.interoception:
@@ -559,7 +570,7 @@ class EmbodiedHuman:
                 mechanical_power=state.actuator_power,
                 arousal=float(self.affect.arousal),
                 stress=float(self.affect.stress),
-                pain_afferent=self.frame.pain_total,
+                pain_afferent=self.frame.pain_total + 0.5 * self.ocular.out.ocular_pain,
                 itch_afferent=self.frame.itch_total,
                 affective_touch=self.frame.affective_touch,
                 touch_intensity=self.frame.touch_intensity,
@@ -601,6 +612,18 @@ class EmbodiedHuman:
         if self.drive_frame is None:
             self.drive_frame = self.drives.update(
                 0.0, self.interoception, self.affect)
+
+        # ---- 50 Hz : behaviour ---------------------------------------------
+        self.acc.setdefault("behavior", 0.0)
+        self.acc["behavior"] += dt
+        if self.acc["behavior"] >= 0.02:
+            dt_b = self.acc["behavior"]
+            self.acc["behavior"] = 0.0
+            if self._behavior_on and self.latent is not None:
+                # autonomous: these behaviours *are* what the person does.
+                # otherwise: ambient -- involuntary and expressive behaviour only
+                self.behavior.ambient = not self.autonomous
+                self.behavior.step(dt_b, self.t)
 
         # ---- 10 Hz : cognition ---------------------------------------
         self.acc["cognition"] += dt
