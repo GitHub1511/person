@@ -887,7 +887,12 @@ class Mind:
         # slot is filled in at the start of the next cycle, after the body has
         # had a chance to move (see _fill_pending_outcome).
         for h in heard:
-            self.memory.append(f'someone else said: "{h}"')
+            # Store the percept (with confidence), never the raw string: memory
+            # must remember what the ears delivered, not experimenter truth.
+            d = _heard_dict(h) if not isinstance(h, dict) else h
+            self.memory.append(
+                f'someone else sounded like (conf {d.get("conf", 1.0):.0%}, '
+                f'~{d.get("dist_m", 0.0):.1f} m): "{d.get("text", "")}"')
         if reply.think or reply.calls:
             think_short = ("you turned over: " + reply.think[:160]) if reply.think \
                 else "you went quiet inside"
