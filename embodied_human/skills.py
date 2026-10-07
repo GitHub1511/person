@@ -1840,16 +1840,34 @@ class SkillSystem:
             elif self._rec_caught:
                 # Caught roll onto folded knees: stand up from kneeling
                 self.events.append("stand_up: kneel to stand")
-                # Phase 1: Extend hips and knees to get feet under hips
+                # Phase 1: Shift weight forward onto hands, extend hips slightly
                 yield from self._rec_hold(
-                    {"knee_l": 0.20, "knee_r": 0.20,
-                     "hip_l_flex": -0.10, "hip_r_flex": -0.10,
+                    {"knee_l": 1.50, "knee_r": 1.50,
+                     "hip_l_flex": -0.50, "hip_r_flex": -0.50,
+                     "ankle_l_flex": 0.0, "ankle_r_flex": 0.0,
+                     "spine_bend": 0.20, "chest_bend": 0.10,
+                     "sh_l_flex": -0.20, "sh_r_flex": -0.20,
+                     "elbow_l": -0.80, "elbow_r": -0.80},
+                    4.0, lambda: self._rec_com() > 0.35, "kneel-shift-forward")
+                # Phase 2: Extend hips and knees together
+                yield from self._rec_hold(
+                    {"knee_l": 0.80, "knee_r": 0.80,
+                     "hip_l_flex": -0.20, "hip_r_flex": -0.20,
                      "ankle_l_flex": -0.10, "ankle_r_flex": -0.10,
-                     "spine_bend": 0.10, "chest_bend": 0.05,
-                     "sh_l_flex": 0.20, "sh_r_flex": 0.20,
-                     "elbow_l": -0.30, "elbow_r": -0.30},
-                    5.0, lambda: self._rec_com() > 0.45, "kneel-rise")
-                # Phase 2: Extend fully to standing
+                     "spine_bend": 0.15, "chest_bend": 0.05,
+                     "sh_l_flex": 0.0, "sh_r_flex": 0.0,
+                     "elbow_l": -0.40, "elbow_r": -0.40},
+                    5.0, lambda: self._rec_com() > 0.50, "kneel-rise-1")
+                # Phase 3: Near-full extension
+                yield from self._rec_hold(
+                    {"knee_l": 0.30, "knee_r": 0.30,
+                     "hip_l_flex": -0.05, "hip_r_flex": -0.05,
+                     "ankle_l_flex": -0.05, "ankle_r_flex": -0.05,
+                     "spine_bend": 0.05, "chest_bend": 0.02,
+                     "sh_l_flex": 0.10, "sh_r_flex": 0.10,
+                     "elbow_l": -0.20, "elbow_r": -0.20},
+                    5.0, lambda: self._rec_com() > 0.60, "kneel-rise-2")
+                # Phase 4: Full extension to standing
                 yield from self._rec_hold(
                     {"knee_l": 0.10, "knee_r": 0.10,
                      "hip_l_flex": 0.0, "hip_r_flex": 0.0,
