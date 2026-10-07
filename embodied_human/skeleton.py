@@ -150,13 +150,15 @@ PUPIL = (0.02, 0.02, 0.02, 1.0)
 EYE_X, EYE_Y, EYE_Z = 0.030, -0.0955, 0.078
 
 # --------------------------------------------------------------------------
-# Torque limits by joint family (Nm) - from isokinetic dynamometry literature
-# --------------------------------------------------------------------------
+# Torque limits by joint family (Nm) - from isokinetic dynamometry literature.
+# Upper body and trunk are assisted above human norms so the body can push
+# itself back up after a fall (push-up margin was 1.04, cobra 1.4); legs stay
+# at human values because standing is tuned on them.
 T = {
-    "spine_bend": 120.0, "spine_side": 80.0, "spine_twist": 55.0,
+    "spine_bend": 150.0, "spine_side": 100.0, "spine_twist": 55.0,
     "neck": 18.0, "jaw": 45.0, "eye": 0.05,
-    "sh_flex": 80.0, "sh_abd": 70.0, "sh_rot": 40.0,
-    "elbow": 60.0, "wrist_flex": 14.0, "wrist_dev": 10.0,
+    "sh_flex": 110.0, "sh_abd": 90.0, "sh_rot": 40.0,
+    "elbow": 80.0, "wrist_flex": 14.0, "wrist_dev": 10.0,
     # Real finger flexors produce a few newton-metres at the MCP joint; the
     # earlier 18 Nm would crush an apple and registers as phantom pain.
     "finger": 2.6, "thumb": 3.2,
