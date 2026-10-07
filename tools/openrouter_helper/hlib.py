@@ -464,41 +464,82 @@ def snapshot() -> int:
 
 
 def rollback() -> int:
-    f = STATE / "snapshot.txt"
-    if not f.exists():
+    ts = _snapshot_ts()
+    if ts is None:
         print("no snapshot to roll back to", file=sys.stderr)
         return 2
-    d = STATE / "snapshots" / f.read_text().strip()
-    man = json.loads((d / "manifest.json").read_text())
-    keep = set(man["files"])
+    d = STATE / "snapshots" / ts
+    try:
+        man = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"snapshot manifest unreadable: {e}", file=sys.stderr)
+        return 2
+    keep: set[str] = set()
+    root_resolved = ROOT.resolve()
+    for rel in man.get("files", []):
+        if not isinstance(rel, str):
+            continue
+        if ".." in rel.replace("\\", "/").split("/") or rel.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", rel):
+            continue
+        try:
+            dst = (ROOT / rel).resolve()
+            src = (d / rel).resolve()
+            if not dst.is_relative_to(root_resolved) or not src.is_relative_to((STATE / "snapshots").resolve()):
+                continue
+        except (OSError, ValueError):
+            continue
+        keep.add(rel)
     restored = removed = 0
     for rel in keep:
         src, dst = d / rel, ROOT / rel
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        if not dst.exists() or hashlib.sha256(dst.read_bytes()).digest() != hashlib.sha256(src.read_bytes()).digest():
-            shutil.copy2(src, dst)
-            restored += 1
+        try:
+            if not src.is_file():
+                continue
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if not dst.exists() or hashlib.sha256(dst.read_bytes()).digest() != hashlib.sha256(src.read_bytes()).digest():
+                shutil.copy2(src, dst)
+                restored += 1
+        except OSError:
+            continue
     for p in _editable_files():
         if p.relative_to(ROOT).as_posix() not in keep:             # created since the snapshot
-            p.unlink()
-            removed += 1
+            try:
+                p.unlink()
+                removed += 1
+            except OSError:
+                pass
     print(f"rolled back: {restored} files restored, {removed} new files removed")
     return 0
 
 
 def changed_since_snapshot() -> list[str]:
-    f = STATE / "snapshot.txt"
-    if not f.exists():
+    ts = _snapshot_ts()
+    if ts is None:
         return []
-    d = STATE / "snapshots" / f.read_text().strip()
-    man = json.loads((d / "manifest.json").read_text())
+    d = STATE / "snapshots" / ts
+    try:
+        man = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    keep = set(man.get("files", [])) if isinstance(man.get("files"), list) else set()
     ch = []
     for p in _editable_files():
         rel = p.relative_to(ROOT).as_posix()
         s = d / rel
-        if not s.exists() or p.read_bytes() != s.read_bytes():
+        try:
+            if not s.exists() or p.read_bytes() != s.read_bytes():
+                ch.append(rel)
+        except OSError:
             ch.append(rel)
-    return sorted(ch)
+    # Deleted since snapshot: in manifest but no longer on disk.
+    try:
+        on_disk = {p.relative_to(ROOT).as_posix() for p in _editable_files()}
+    except OSError:
+        on_disk = set()
+    for rel in keep:
+        if isinstance(rel, str) and rel not in on_disk:
+            ch.append(rel)
+    return sorted(set(ch))
 
 
 # ==========================================================================
@@ -508,43 +549,77 @@ def verify() -> int:
     t0 = time.time()
     problems: list[str] = []
     changed = changed_since_snapshot()
-    f = STATE / "snapshot.txt"
+    ts = _snapshot_ts()
     # 1. the helper and the key are not the coder's to change
-    if f.exists():
-        man = json.loads((STATE / "snapshots" / f.read_text().strip() / "manifest.json").read_text())
-        for rel, h in man.get("protected", {}).items():
-            p = ROOT / rel
-            if not p.exists() or hashlib.sha256(p.read_bytes()).hexdigest() != h:
-                problems.append(f"protected file changed: {rel}")
+    if ts is not None:
+        try:
+            man = json.loads((STATE / "snapshots" / ts / "manifest.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            problems.append(f"snapshot manifest unreadable: {e}")
+            man = {}
+        for rel, h in (man.get("protected", {}) or {}).items():
+            try:
+                p = ROOT / rel
+                if not p.exists() or hashlib.sha256(p.read_bytes()).hexdigest() != h:
+                    problems.append(f"protected file changed: {rel}")
+            except OSError:
+                problems.append(f"protected file unreadable: {rel}")
     # 2. compile
     for rel in changed:
         if rel.endswith(".py"):
-            r = sh([PY, "-m", "py_compile", str(ROOT / rel)], timeout=60)
+            try:
+                r = sh([PY, "-m", "py_compile", str(ROOT / rel)], timeout=60)
+            except subprocess.TimeoutExpired:
+                problems.append(f"compile timed out: {rel}")
+                continue
             if r.returncode:
-                problems.append(f"does not compile: {rel}: {r.stderr.strip().splitlines()[-1] if r.stderr.strip() else '?'}")
+                err = (r.stderr or "").strip().splitlines()
+                problems.append(f"does not compile: {rel}: {err[-1] if err else '?'}")
     if not problems:
         for lvl in ("base", "rich"):
-            r = sh([PY, "-c", "import embodied_human.agent"], timeout=180, env={"PERSON_COMPLEXITY": lvl})
+            try:
+                r = sh([PY, "-c", "import embodied_human.agent"], timeout=180, env={"PERSON_COMPLEXITY": lvl})
+            except subprocess.TimeoutExpired:
+                problems.append(f"import timed out at {lvl}")
+                continue
             if r.returncode:
-                problems.append(f"import fails at {lvl}: {(r.stderr.strip().splitlines() or ['?'])[-1]}")
+                err = (r.stderr or "").strip().splitlines()
+                problems.append(f"import fails at {lvl}: {(err or ['?'])[-1]}")
     smoke = {}
     if not problems:
-        r = sh([PY, str(HERE / "smoke.py"), "base", os.environ.get("HELPER_SMOKE_SECS", "20")], timeout=400, env={"PERSON_COMPLEXITY": "base"})
-        line = [l for l in r.stdout.splitlines() if l.startswith("@@")]
-        if r.returncode or not line:
-            problems.append("smoke run failed: " + ((r.stderr.strip().splitlines() or r.stdout.strip().splitlines() or ["?"])[-1]))
-        else:
-            smoke = json.loads(line[0][2:])
-            base = STATE / "baseline.json"
-            if not base.exists():
-                base.write_text(json.dumps(smoke))
+        try:
+            r = sh([PY, str(HERE / "smoke.py"), "base", os.environ.get("HELPER_SMOKE_SECS", "20")], timeout=400, env={"PERSON_COMPLEXITY": "base"})
+        except subprocess.TimeoutExpired:
+            problems.append("smoke run timed out")
+            r = None
+        if r is not None:
+            line = [l for l in r.stdout.splitlines() if l.startswith("@@")]
+            if r.returncode or not line:
+                err = ((r.stderr or "").strip().splitlines() or (r.stdout or "").strip().splitlines() or ["?"])
+                problems.append("smoke run failed: " + err[-1])
             else:
-                b = json.loads(base.read_text())
-                if smoke["ms_per_step"] > 1.25 * b["ms_per_step"] + 0.3:
-                    problems.append(f"too slow: {smoke['ms_per_step']:.2f} ms/step vs baseline {b['ms_per_step']:.2f}")
-            for k in ("nan", "fallen"):
-                if smoke.get(k):
-                    problems.append(f"smoke: {k}")
+                try:
+                    smoke = json.loads(line[0][2:])
+                except ValueError as e:
+                    problems.append(f"smoke output unreadable: {e}")
+                    smoke = {}
+                else:
+                    base = STATE / "baseline.json"
+                    if not base.exists():
+                        try:
+                            base.write_text(json.dumps(smoke), encoding="utf-8")
+                        except OSError:
+                            pass
+                    else:
+                        try:
+                            b = json.loads(base.read_text(encoding="utf-8"))
+                            if smoke.get("ms_per_step", 0) > 1.25 * b.get("ms_per_step", 0) + 0.3:
+                                problems.append(f"too slow: {smoke.get('ms_per_step', 0):.2f} ms/step vs baseline {b.get('ms_per_step', 0):.2f}")
+                        except (OSError, ValueError, KeyError, TypeError):
+                            pass
+                    for k in ("nan", "fallen"):
+                        if smoke.get(k):
+                            problems.append(f"smoke: {k}")
     if problems and not changed:
         problems.insert(0, "the tree was ALREADY broken before this step (nothing changed since the snapshot)")
     res = {"pass": not problems, "problems": problems, "changed": changed, "smoke": smoke,
