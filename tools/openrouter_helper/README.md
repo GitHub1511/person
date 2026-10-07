@@ -6,7 +6,27 @@ whatever coder you point at it, checks the result, undoes it if it broke somethi
 ```bash
 bash tools/openrouter_helper/helper.sh run          # runs until you stop it
 bash tools/openrouter_helper/helper.sh stop         # from another terminal
+bash tools/openrouter_helper/helper.sh ui           # web console: goal box + live feedback
 ```
+
+## Goal-directed mode (you steer, Pi builds)
+
+The loop can build **recursively towards a prompt you give it**. Your goal becomes the
+planner's highest priority (injected into every plan request) and Pi executes each step
+through the local gateway (quotas enforced), with snapshot → verify → rollback on failure,
+until the cycle budget is used up:
+
+```bash
+bash tools/openrouter_helper/helper.sh run-goal "make the person stand up, then take three steps" 12
+bash tools/openrouter_helper/helper.sh goal "make grasping physically earned"   # set goal only
+bash tools/openrouter_helper/helper.sh goal-clear                               # back to thesis-driven
+```
+
+Or use the **web console** (`helper.sh ui`, then open http://127.0.0.1:8770): type the
+goal, set max cycles, press *Save goal & start loop*, and watch live feedback — loop
+state, quota usage, current step, last PASS/FAIL with reasons, step history, Pi's latest
+report, and the run log tail (refreshes every 3 s). The console only writes goal files
+and starts/stops the loop; it never edits project code.
 
 ## What one step does
 
@@ -20,8 +40,9 @@ bash tools/openrouter_helper/helper.sh stop         # from another terminal
    the prompt; models cannot be forced to comply). The planner may also name public web pages, which are
    fetched read-only (public hosts only, text only, size-limited) and attached as reference material.
 3. **Snapshots** the editable files and writes `state/next_task.md`.
-4. **Waits for your coder.** The coder works in the project directory with its own tools and ends with
-   `bash tools/openrouter_helper/helper.sh done`.
+4. **Pi codes it.** `helper.sh run` starts Pi itself (`AUTO_CODER=0` goes back to waiting
+   for a coder you start yourself, ending with `helper.sh done`). Pi works through the
+   local gateway only (quotas still hold), inside the permission guard.
 5. **Verifies**: every changed `.py` compiles; the package imports at `base` *and* `rich`; a smoke
    simulation runs (no exception, no NaN, not fallen, not >25 % slower than baseline); the helper and the
    key file were not touched. **On failure the files are rolled back** to the snapshot. The outcome is
@@ -92,7 +113,9 @@ bold (`**TITLE:**`), and `<think>` blocks, and drops unsafe `FILES_TO_READ` entr
 
 | file | role |
 |---|---|
-| `helper.sh` | the bash driver: `run plan done verify rollback snapshot resources fetch probe serve status stop` |
+| `helper.sh` | the bash driver: `run run-goal goal goal-clear plan coder done verify rollback snapshot resources fetch probe serve status ui stop` |
+| `ui.py` | localhost web console (goal box + live feedback), 127.0.0.1 only |
+| `readme_helper/` | second hourly agent: one massive prompt + one Nemotron 3 Super output refreshes README |
 | `proxy.py` | local gateway: model order, quotas, rate limit, retries, persistence (127.0.0.1 only) |
 | `hlib.py` | context builder, `.npz` reader, resource allocation, planner request/parse, snapshot/rollback/verify |
 | `smoke.py` | the 20 s verification simulation |
