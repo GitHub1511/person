@@ -2163,7 +2163,8 @@ class SkillSystem:
         lunged = False
         lunge_side = "l" if self._recover_attempts % 2 == 0 else "r"
         F, B = lunge_side, ("r" if lunge_side == "l" else "l")
-        while ag.t - t0 < 16.0:
+        best_gap = self._rec_furniture_gap()
+        while ag.t - t0 < 20.0:
             face = self._rec_chest_face_z()
             com = self._rec_com()
             peak = max(peak, com)
