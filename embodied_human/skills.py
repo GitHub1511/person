@@ -1838,16 +1838,12 @@ class SkillSystem:
                 self._rec_caught = True
                 self.events.append("stand_up: table climb worked, kneeling")
             elif self._rec_caught:
-                # Caught roll onto folded knees: roll toward table until within reach, then table-assisted stand
-                self.events.append("stand_up: roll toward table")
+                # Caught roll onto folded knees: simple arm-pull crawl to table, then table-assisted stand
+                self.events.append("stand_up: arm-pull crawl to table")
+                # Crawl toward table using arm pulls (bypasses hand-walk which is for standing)
                 while self._rec_furniture_gap() > 0.45:
-                    self.events.append(f"stand_up: rolling to table (gap {self._rec_furniture_gap():.2f} m)")
-                    try:
-                        yield from self._rec_roll()
-                    except ActionFailed:
-                        # Cobra failed, continue rolling toward table
-                        self.events.append("stand_up: cobra failed, continuing roll toward table")
-                        continue
+                    self.events.append(f"stand_up: arm-pull crawl to table (gap {self._rec_furniture_gap():.2f} m)")
+                    yield from self._rec_crawl_to_table()
                     if self._rec_furniture_gap() <= 0.45:
                         break
                     yield
