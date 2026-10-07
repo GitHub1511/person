@@ -1,4 +1,4 @@
-"""Render what the body actually does during tip-over and fold (one png)."""
+"""Render a full stand_up attempt (6 shots)."""
 import mujoco
 import numpy as np
 import matplotlib
@@ -37,21 +37,23 @@ def snap():
 
 snap()
 sk = ag.skills
-sk.recovery_active = True
-sk.recovery_targets = {'knee_l': 2.2, 'knee_r': 2.2, 'hip_l_flex': -1.4,
-                       'hip_r_flex': -1.4, 'spine_bend': 0.35,
-                       'chest_bend': 0.2, 'sh_l_flex': 0.8, 'sh_r_flex': 0.8,
-                       'elbow_l': -0.4, 'elbow_r': -0.4}
-for i in range(1800):
+sk._auto_recover_t = 1e9  # only the explicit attempt runs
+sk.api_stand_up()
+labels = ["down"]
+for i in range(6000):
     ag.step()
-    if i in (599, 1199, 1799):
+    if i in (999, 1999, 2999, 3999, 5999):
         snap()
+        st = ag.state
+        labels.append(f"t+{(i+1)//1000}s com{st.com[2]:.2f}")
 print("fallen:", ag.state.fallen, "com_z:", round(float(ag.state.com[2]), 3))
-fig, axes = plt.subplots(1, 4, figsize=(14, 4))
-for k, (fr, t) in enumerate(zip(shots, ["tipped+settled", "fold+2s", "fold+4s", "fold+6s"])):
-    axes[k].imshow(fr)
-    axes[k].set_title(t)
-    axes[k].set_xticks([])
-    axes[k].set_yticks([])
+print("events:", ag.skills.events[-5:])
+fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+for k in range(6):
+    ax = axes[k // 3][k % 3]
+    ax.imshow(shots[k])
+    ax.set_title(labels[k])
+    ax.set_xticks([])
+    ax.set_yticks([])
 fig.savefig("out/getup_shots.png", dpi=80)
 print("saved out/getup_shots.png")
