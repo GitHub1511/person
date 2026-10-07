@@ -1644,7 +1644,7 @@ class SkillSystem:
                  "ankle_l_flex": -0.60, "ankle_r_flex": -0.60,
                  "spine_bend": 0.12, "chest_bend": 0.08,
                  "sh_l_flex": 0.60, "sh_r_flex": 0.60},
-                5.0, lambda: self._rec_com() > 0.60, "kneel")
+                3.0, lambda: self._rec_com() > 0.60, "kneel")
             yield from self._rec_hold(
                 {"knee_l": 0.40, "hip_l_flex": -0.30, "ankle_l_flex": -0.15,
                  "knee_r": 1.60, "hip_r_flex": -1.10, "ankle_r_flex": -0.55,
@@ -1692,7 +1692,7 @@ class SkillSystem:
         cy = f["y"] + (f["hy"] - 0.03) * (1.0 if c[1] >= f["y"] else -1.0)
         gap = float(np.hypot(c[0] - cx, c[1] - cy))
         inside = (abs(c[0] - f["x"]) < f["hx"] and abs(c[1] - f["y"]) < f["hy"])
-        if inside or gap > 0.55:
+        if inside or gap > 0.70:
             sk.events.append(f"stand_up: table leg {'under' if inside else 'too far'} "
                              f"(gap {gap:.2f} m), floor routine")
             return False
