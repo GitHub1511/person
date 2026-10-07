@@ -252,6 +252,36 @@ def _level_word(x: float) -> str:
         "moderately" if x < 0.6 else "strongly"
 
 
+def _heard_dict(e) -> dict:
+    """HeardEvent (or legacy string) -> plain dict for prompts and backends."""
+    if isinstance(e, dict):
+        return e
+    text = getattr(e, "heard", None)
+    if text is None:
+        return {"text": str(e), "conf": 1.0, "dist_m": 0.0, "az_deg": 0.0,
+                "masked": 0, "dur": 0.0}
+    return {"text": e.heard, "conf": float(e.conf), "dist_m": float(e.dist_m),
+            "az_deg": float(e.az_deg), "masked": int(e.masked),
+            "dur": float(e.dur)}
+
+
+def _heard_line(h: dict) -> str:
+    """One prompt line for a heard event: direction, confidence, no filling."""
+    az = h.get("az_deg", 0.0)
+    side = "left" if az > 8 else "right" if az < -8 else "ahead"
+    words = h.get("text", "").split()
+    lost = h.get("masked", 0) > len(words) // 2 or h.get("conf", 1.0) < 0.25
+    if lost:
+        return (f'You catch fragments of a voice from {side} '
+                f'(~{h.get("dist_m", 0.0):.1f} m, faint; toy-model ears heard it at '
+                f'{h.get("conf", 0.0):.0%} confidence): "{h.get("text", "")}" -- most of '
+                f'it was lost; do not guess the missing parts.')
+    return (f'You hear a voice from {side} '
+            f'(~{h.get("dist_m", 0.0):.1f} m; toy-model ears, confidence '
+            f'{h.get("conf", 1.0):.0%}): "{h.get("text", "")}" (their voice; your jaw '
+            f'did not move; bracketed [...] parts never arrived -- do not fill them in)')
+
+
 class PerceptBuilder:
     def __init__(self, agent):
         self.agent = agent
@@ -277,7 +307,7 @@ class PerceptBuilder:
         ctx["visible"] = w.visible_objects()
         ctx["furniture"] = w.visible_furniture()
         ctx["events"] = list(sk.events)
-        ctx["heard"] = list(sk.heard)
+        ctx["heard"] = [_heard_dict(e) for e in sk.heard]
         # inner state
         a = ag.affect_frame
         dr = ag.drive_frame
@@ -401,8 +431,7 @@ class PerceptBuilder:
         if ctx["events"]:
             L.append("Just happened: " + "; ".join(ctx["events"][-4:]) + ".")
         for h in ctx["heard"]:
-            L.append(f'Someone else nearby is saying: "{h}" '
-                     f"(their voice; your jaw did not move)")
+            L.append(_heard_line(h if isinstance(h, dict) else _heard_dict(h)))
         if memory:
             L.append("How things have gone for you (your earlier thought, "
                      "what you did, what followed):")
@@ -631,7 +660,11 @@ class StubBackend(Backend):
     def _decide(self, ctx: dict) -> tuple[str, list[str]]:
         self.cycle += 1
         if ctx.get("heard"):
-            return self._reply_to(ctx["heard"][-1], ctx)
+            h = _heard_dict(ctx["heard"][-1])
+            if h.get("conf", 1.0) < 0.35:
+                return ("I caught only fragments of a voice; not enough to answer.",
+                        [])
+            return self._reply_to(h["text"], ctx)
         if "FAILED" in " ".join(ctx.get("events", [])):
             self.phase = "idle"
             self.target = None
