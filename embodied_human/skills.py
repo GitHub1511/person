@@ -2176,7 +2176,7 @@ class SkillSystem:
             if face < -0.50 or com > 0.35:
                 self.events.append("stand_up: rolled prone")
                 return
-            if tucked and com > 0.38:
+            if tucked and com > 0.42:
                 # caught a big rock onto the folded knees: skip ahead
                 self._rec_caught = True
                 self.events.append("stand_up: caught roll onto knees")
