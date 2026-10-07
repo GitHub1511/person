@@ -32,6 +32,9 @@ def wrap(a: float) -> float:
 
 
 class World:
+    ODORANT_EMISSION = 0.02
+    TASTANT_EMISSION = 0.01
+
     def __init__(self, agent):
         self.agent = agent
         self.m = agent.model
@@ -172,6 +175,13 @@ class World:
                         "dist": float(np.hypot(*self.to_ego(p)[:2]))})
         out.sort(key=lambda r: r["dist"])
         return out
+
+    def get_odorant_concentration(self, pos) -> float:
+        return self.ODORANT_EMISSION if pos[2] > 0.1 else 0.0
+
+    def get_tastant_concentration(self, pos) -> float:
+        return self.TASTANT_EMISSION if (abs(pos[0]) < 0.1 and abs(pos[1]) < 0.1
+                                              and 0.05 < pos[2] < 0.2) else 0.0
 
     def visible_furniture(self) -> list[dict]:
         out = []

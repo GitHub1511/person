@@ -1147,8 +1147,9 @@ class ReceptorSystem:
         self.resp_rate = 13.0          # breaths per minute, for sniffing
         self.fusimotor = 0.35
 
-    def sense(self, model, data, meta, state: BodyState, *,
-              arousal: float = 0.3, blood_flow: float = 1.0) -> ReceptorFrame:
+    def sense(self, model, data, meta, state: BodyState,
+              world=None, world_nose_pos=None, world_mouth_pos=None,
+              *, arousal: float = 0.3, blood_flow: float = 1.0) -> ReceptorFrame:
         dt = 1.0 / self.cfg.rates.receptor
         self.tactile.apply_contact_temperature(state, dt)
         tact, agg = self.tactile.sense(model, data, meta, state,
@@ -1157,7 +1158,20 @@ class ReceptorSystem:
         vest = self.vestibular.sense(model, data, meta, state)
         vis = self.visual.sense(model, data, meta, state, arousal=arousal)
         aud = self.auditory.sense(model, data, meta, state)
+        # ---- olfactory / gustatory world emission -----------------------
+        nose_pos = world_nose_pos if world_nose_pos is not None else (
+            state.site_pos.get("gaze", state.gaze_pos) if hasattr(state, 'site_pos') else np.zeros(3))
+        mouth_pos = world_mouth_pos if world_mouth_pos is not None else (
+            state.site_pos.get("mouth", state.gaze_pos) if hasattr(state, 'site_pos') else np.zeros(3))
+        if world is not None:
+            olf[:] = world.get_odorant_concentration(nose_pos) * np.ones_like(olf)
+            gus[:] = world.get_tastant_concentration(mouth_pos) * np.ones_like(gus)
+
         olf, gus, chemo_sum = self.chemo.sense(model, data, meta, state)
+        # override with world emission if present
+        if world is not None:
+            olf[:] = world.get_odorant_concentration(nose_pos) * np.ones_like(olf)
+            gus[:] = world.get_tastant_concentration(mouth_pos) * np.ones_like(gus)
 
         # ---- populations ------------------------------------------------------
         ext: dict[str, np.ndarray] = {}

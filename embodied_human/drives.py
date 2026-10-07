@@ -88,7 +88,8 @@ class DriveSystem:
                affect, afferent_pain: float = 0.0,
                afferent_itch: float = 0.0, social_contact: float = 0.0,
                novelty: float = 0.0, balance_error: float = 0.0,
-               fallen: float = 0.0, extra: np.ndarray | None = None) -> DriveFrame:
+               fallen: float = 0.0, extra: np.ndarray | None = None,
+               odorant: float = 0.0, tastant: float = 0.0) -> DriveFrame:
         s = intero.s
         g = IDX
 
@@ -163,6 +164,12 @@ class DriveSystem:
             ex = np.concatenate([ex, np.zeros(n_extra - len(ex))])
         levels = np.concatenate([levels, ex])
         levels = np.nan_to_num(fclip(levels, 0.0, 1.5))
+
+        # --- chemical sense drive coupling ---
+        if odorant > 0:
+            levels[0] += 0.2 * odorant  # hunger index 0
+        if tastant > 0:
+            levels[1] += 0.15 * tastant  # thirst index 1
 
         if not self._init:
             self.prev = levels.copy()
