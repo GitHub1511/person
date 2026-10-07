@@ -54,7 +54,24 @@ def main() -> int:
     time.sleep(1.0)
     h = (sb / "tools" / "openrouter_helper" / "helper.sh").as_posix()
     logf = open(sb / "run.log", "w")
+    import atexit
+    def cleanup():
+        try:
+            subprocess.run([BASH, h, "stop"], env=env, capture_output=True, timeout=20)
+        except Exception:
+            pass
+        pp = state / "proxy.pid"
+        if pp.exists():
+            subprocess.run(["taskkill", "/F", "/PID", pp.read_text().strip()], capture_output=True)
+        for p in (run_proc[0], mock):
+            try:
+                p.kill()
+            except Exception:
+                pass
+    run_proc = [None]
+    atexit.register(cleanup)
     run = subprocess.Popen([BASH, h, "run"], env=env, stdout=logf, stderr=subprocess.STDOUT)
+    run_proc[0] = run
 
     SCHEDULE = ["good", "bad", "nothing", "bad_import", "good", "silent", "bad", "good", "nothing", "bad_import"]
     stop_flag = threading.Event()
