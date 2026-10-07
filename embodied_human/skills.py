@@ -1614,6 +1614,7 @@ class SkillSystem:
         self.recovery_active = True
         self._rec_caught = False
         self._rec_walked = False
+        self._rec_lunged = False
         try:
             # Curl into a ball first: always feasible (no ground leverage
             # needed), and a balled body rolls far easier than a sprawled one.
