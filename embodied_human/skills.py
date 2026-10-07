@@ -1631,10 +1631,16 @@ class SkillSystem:
                 self._rec_set({"knee_l": 0.10, "knee_r": 0.10,
                                "hip_l_flex": -0.05, "hip_r_flex": -0.05,
                                "ankle_l_flex": 0.40, "ankle_r_flex": 0.40,
-                               "spine_bend": 0.50, "chest_bend": 0.30})
+                               "spine_bend": 0.50, "chest_bend": 0.30,
+                               "elbow_l": -0.10, "elbow_r": -0.10})
                 try:
                     yield from self._rec_hand_walk()
                     self._rec_walked = True
+                except ActionFailed as exc:
+                    # Fall through to the kneel chain, which verifies and
+                    # fails fast if the walk bought nothing.
+                    self.events.append(f"stand_up: walk failed ({exc}), trying kneel")
+                    self._rec_walked = False
                 finally:
                     if not self._rec_walked:
                         self._rec_hold_table = False
