@@ -9,3 +9,11 @@ out_smoke/
 # LM Studio orchestrator output (changes live; remove these two lines to publish it)
 orchestrator/
 AI_LOG.txt
+
+# OpenRouter helper: secrets and run state never go to GitHub
+tools/openrouter_helper/.env
+tools/openrouter_helper/state/
+tools/openrouter_helper/pi/
+*.env
+.env
+
