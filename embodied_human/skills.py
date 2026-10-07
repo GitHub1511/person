@@ -1667,20 +1667,40 @@ class SkillSystem:
                            f"(COM {self._rec_com():.2f} m)")
 
     def _rec_roll(self):
-        """Roll until prone (chest-back faces up) or the COM lifts."""
+        """Roll until prone (chest-back faces up) or the COM lifts.
+
+        Side-lying is a stable equilibrium far stronger than the spine-twist
+        motors, so the roll uses the heavy levers: one leg swings over the
+        body while the opposite arm reaches overhead, and the twist follows.
+        Two mirror poses alternate every ~2.5 s; whichever raises the chest
+        is kept (hill-climbing on the live orientation).
+        """
         ag = self.agent
         if self._rec_chest_up_z() > 0.55 or self._rec_com() > 0.35:
             return
+
+        def pose(sign):
+            p = {"spine_twist": sign * 0.45, "chest_twist": sign * 0.40,
+                 "spine_side": sign * 0.20}
+            top = "l" if sign > 0 else "r"
+            bot = "r" if sign > 0 else "l"
+            p.update({f"hip_{top}_flex": -1.40, f"knee_{top}": 1.80,
+                      f"hip_{top}_abd": 0.25,
+                      f"hip_{bot}_flex": -0.10, f"knee_{bot}": 0.15,
+                      f"sh_{top}_flex": 2.20, f"elbow_{top}": -0.20,
+                      f"sh_{bot}_flex": -0.50, f"elbow_{bot}": -0.60})
+            return p
+
         sign = 1.0 if self._recover_attempts % 2 == 1 else -1.0
-        base = {"sh_l_abd": 0.50, "sh_r_abd": 0.50,
-                "elbow_l": -0.40, "elbow_r": -0.40,
-                "knee_l": 0.50, "knee_r": 0.50,
-                "hip_l_flex": -0.30, "hip_r_flex": -0.30}
         t0 = ag.t
         last_flip = ag.t
         best = self._rec_chest_up_z()
-        tw = sign * 0.55
-        while ag.t - t0 < 9.0:
+        cur = pose(sign)
+        full = dict(self.q_nom_map)
+        full.update(cur)
+        self._rec_set({nm: tv for nm, tv in full.items()
+                       if nm in ag.meta.qpos_addr})
+        while ag.t - t0 < 12.0:
             if self._rec_chest_up_z() > 0.55 or self._rec_com() > 0.35:
                 self.events.append("stand_up: rolled prone")
                 return
@@ -1688,16 +1708,14 @@ class SkillSystem:
                 if self._rec_chest_up_z() > best + 0.05:
                     best = self._rec_chest_up_z()
                 else:
-                    tw = -tw  # wrong way: flip the twist
+                    sign = -sign  # wrong side: mirror the whole pose
                     best = self._rec_chest_up_z()
+                    cur = pose(sign)
+                    full = dict(self.q_nom_map)
+                    full.update(cur)
+                    self._rec_set({nm: tv for nm, tv in full.items()
+                                   if nm in ag.meta.qpos_addr})
                 last_flip = ag.t
-            tgt = dict(base)
-            tgt["spine_twist"] = tw
-            tgt["chest_twist"] = tw
-            full = dict(self.q_nom_map)
-            full.update(tgt)
-            self._rec_set({nm: tv for nm, tv in full.items()
-                           if nm in ag.meta.qpos_addr})
             yield
         raise ActionFailed("stand_up: could not roll prone "
                            f"(chest_up {self._rec_chest_up_z():+.2f})")

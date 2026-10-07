@@ -411,11 +411,11 @@ class TactileSystem:
         drive_fa1 = fclip(drive_fa1, -50.0, 50.0)
         drive_fa2 = fclip(drive_fa2, -50.0, 50.0)
 
-        self.adapt_sa1 += (dt / A.tau_sa1) * (drive_sa1 - self.adapt_sa1)
-        self.adapt_sa2 += (dt / A.tau_sa2) * (drive_sa2 - self.adapt_sa2)
-        self.adapt_fa1 += (dt / A.tau_fa1) * (drive_fa1 - self.adapt_fa1)
-        self.adapt_fa2 += (dt / A.tau_fa2) * (drive_fa2 - self.adapt_fa2)
-        self.adapt_ct += (dt / A.tau_ct) * (drive_ct - self.adapt_ct)
+        self.adapt_sa1 += (dt / (dt + A.tau_sa1)) * (drive_sa1 - self.adapt_sa1)
+        self.adapt_sa2 += (dt / (dt + A.tau_sa2)) * (drive_sa2 - self.adapt_sa2)
+        self.adapt_fa1 += (dt / (dt + A.tau_fa1)) * (drive_fa1 - self.adapt_fa1)
+        self.adapt_fa2 += (dt / (dt + A.tau_fa2)) * (drive_fa2 - self.adapt_fa2)
+        self.adapt_ct += (dt / (dt + A.tau_ct)) * (drive_ct - self.adapt_ct)
 
         sa1 = g["sa1"] * T.sa1_gain * np.tanh(self.adapt_sa1 * 0.9)
         sa2 = g["sa2"] * T.sa2_gain * np.tanh(self.adapt_sa2 * 0.9)
