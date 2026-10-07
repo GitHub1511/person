@@ -1876,6 +1876,9 @@ class SkillSystem:
             if face > 0.50:
                 self.events.append("stand_up: rolled supine")
                 return
+            if face > 0.50:
+                self.events.append("stand_up: rolled supine")
+                return
             # pump the swing at ~0.8 Hz to rock over the hump; static holds
             # alone rock up part-way and fall back
             pump = 0.55 + 0.45 * float(np.sin(2 * np.pi * 0.8 * (ag.t - t0)))
