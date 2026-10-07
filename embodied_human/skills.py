@@ -834,6 +834,10 @@ class SkillSystem:
     def api_stand(self):
         self._enqueue("stand", (), self._a_crouch(0.0))
 
+    def api_stand_up(self):
+        """Get back up after a fall (staged tuck -> kneel -> stand)."""
+        self._enqueue("stand_up", (), self._a_stand_up())
+
     # ==================================================================
     # target resolution
     # ==================================================================
