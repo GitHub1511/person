@@ -222,7 +222,7 @@ def free_memory_gb() -> float:
         m = MS()
         m.l = ctypes.sizeof(MS)
         ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
-        return min(m.ap, m.apf) / 2 ** 30          # free physical and free commit: the smaller binds
+        return m.apf / 2 ** 30                     # free commit charge is what allocations fail on
     except Exception:
         return 8.0
 
@@ -240,7 +240,7 @@ def main() -> int:
     a = ap.parse_args()
     ncpu = os.cpu_count() or 4
     free = free_memory_gb()
-    by_mem = max(2, int(free / 1.6))
+    by_mem = max(2, int(free / 1.6))      # ~1.6 GB of commit per copy, to be safe
     workers = a.workers or max(2, min(ncpu - 4, by_mem, 12))
     print(f"{workers} parallel copies of the person ({free:.1f} GB free), "
           f"{a.sim:.0f} simulated seconds per copy per round", flush=True)
