@@ -1677,10 +1677,15 @@ class SkillSystem:
                 arch = -0.05 - 0.30 * push
                 knee = 0.15 + 1.65 * u
                 hip = 0.25 * push - 1.05 * u
+                # kip: throw arms overhead + head back on the push, slam
+                # down on release — 8.7 kg arms at a 0.5 m lever roughly
+                # double the pump energy over the spine alone
+                arm = 0.10 + 1.90 * push
                 self._rec_set({
                     "spine_bend": arch, "chest_bend": 0.7 * arch,
+                    "neck_bend": -0.30 * push,
                     "elbow_l": -0.05, "elbow_r": -0.05,
-                    "sh_l_flex": 0.10, "sh_r_flex": 0.10,
+                    "sh_l_flex": arm, "sh_r_flex": arm,
                     "hip_l_flex": hip, "hip_r_flex": hip,
                     "knee_l": knee, "knee_r": knee,
                     "ankle_l_flex": 0.30, "ankle_r_flex": 0.30})

@@ -15,12 +15,33 @@ import urllib.request
 from pathlib import Path
 
 
+def _bash_works(cand: str) -> bool:
+    try:
+        r = subprocess.run([cand, "--version"], capture_output=True, text=True, timeout=10)
+        return r.returncode == 0 and "bash" in (r.stdout + r.stderr).lower()
+    except Exception:
+        return False
+
+
 def find_bash() -> str:
-    for cand in (os.environ.get("HELPER_BASH"), shutil.which("bash"),
-                 r"C:\Program Files\Git\bin\bash.exe",
-                 r"C:\Program Files\Git\usr\bin\bash.exe"):
-        if cand and Path(cand).exists():
+    cands = [os.environ.get("HELPER_BASH"),
+             r"C:\Program Files\Git\bin\bash.exe",
+             r"C:\Program Files\Git\usr\bin\bash.exe",
+             shutil.which("bash")]
+    seen: set[str] = set()
+    for cand in cands:
+        if not cand or cand in seen:
+            continue
+        seen.add(cand)
+        # Skip the WSL stub (System32\bash.exe) unless nothing else works.
+        if "system32" in cand.lower() and "git" not in cand.lower():
+            continue
+        if Path(cand).exists() and _bash_works(cand):
             return cand
+    # Last resort: whatever which() found, even the stub.
+    w = shutil.which("bash")
+    if w and Path(w).exists():
+        return w
     raise RuntimeError("bash not found: install Git for Windows or put bash on PATH")
 
 
