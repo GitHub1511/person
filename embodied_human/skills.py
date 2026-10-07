@@ -1840,7 +1840,13 @@ class SkillSystem:
                 if not table_ok:
                     # Caught a big roll onto the folded knees: straight to kneel.
                     self.events.append("stand_up: caught the roll, kneeling")
-            elif not self._rec_pressed:
+                else:
+                    # Cobra succeeded but we're near table - use the table to stand.
+                    pass
+            elif self._rec_pressed:
+                # Already handled by lunge press above
+                pass
+            else:
                 # Hand-plant: arms straight DOWN at the sides (elbows nearly
                 # extended) so the hands touch the ground beside the chest.
                 # Bent elbows tuck the hands 11-15 cm into the air (measured,
