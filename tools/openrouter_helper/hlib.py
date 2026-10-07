@@ -319,22 +319,69 @@ def plan_request() -> int:
 _SECTIONS = ["TITLE", "RATIONALE", "FILES_TO_READ", "WEB", "RISKS", "ACCEPTANCE", "CODER_PROMPT"]
 
 
+def _safe_rel(p: str) -> str | None:
+    """Validate a repo-relative path: no absolute, no .., no drive, must resolve inside ROOT."""
+    if not p or ".." in p.replace("\\", "/").split("/"):
+        return None
+    s = p.strip().strip("`\"'")
+    if not s or s.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", s):
+        return None
+    try:
+        resolved = (ROOT / s).resolve()
+        if not resolved.is_relative_to(ROOT.resolve()):
+            return None
+    except (OSError, ValueError):
+        return None
+    if not (ROOT / s).exists():
+        return None
+    return s
+
+
+def _snapshot_ts() -> str | None:
+    """Validated snapshot id (YYYYMMDD_HHMMSS), or None."""
+    f = STATE / "snapshot.txt"
+    if not f.exists():
+        return None
+    try:
+        ts = f.read_text(encoding="utf-8", errors="replace").strip().split()[0]
+    except OSError:
+        return None
+    if not re.fullmatch(r"\d{8}_\d{6}", ts):
+        return None
+    if not (STATE / "snapshots" / ts).is_dir():
+        return None
+    return ts
+
+
 def plan_parse(path: str) -> int:
     try:
         resp = json.loads(Path(path).read_text(encoding="utf-8"))
-        text = resp["choices"][0]["message"]["content"]
+        text = resp["choices"][0]["message"].get("content") or ""
+        if not isinstance(text, str):
+            text = str(text)
     except Exception as e:
         print(f"bad planner reply: {e}", file=sys.stderr)
         return 2
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
+    # Strip reasoning blocks in any case / with attributes; tolerate unclosed tags.
+    text = re.sub(r"<think\b[^>]*>.*?</think\s*>", "", text, flags=re.S | re.I).strip()
+    text = re.sub(r"<thinking\b[^>]*>.*?</thinking\s*>", "", text, flags=re.S | re.I).strip()
+    text = re.sub(r"<think\b[^>]*>.*$", "", text, flags=re.S | re.I).strip()
     idx = {}
     for s in _SECTIONS:
-        m = re.search(rf"^\s*\**{s}\**\s*:", text, re.M)
+        # Tolerate markdown headings (# TITLE:), bold (**TITLE:**), numbers (1. TITLE:).
+        m = re.search(rf"(?m)^\s*(?:#+\s*|\d+[.)]\s*)?(?:\**{s}\**)\s*:", text, re.I)
+        # Avoid matching SUBTITLE when looking for TITLE: require the keyword itself.
         if m:
+            # Guard against SUBTITLE-style false positives: the char before the keyword
+            # must not be a letter.
+            start_kw = m.group(0).upper().find(s)
+            abs_kw = m.start() + start_kw
+            if abs_kw > 0 and text[abs_kw - 1].isalpha():
+                continue
             idx[s] = m
     if "TITLE" not in idx or "CODER_PROMPT" not in idx:
         print("planner reply is missing TITLE or CODER_PROMPT", file=sys.stderr)
-        (STATE / "bad_plan.txt").write_text(text)
+        (STATE / "bad_plan.txt").write_text(text, encoding="utf-8")
         return 2
     order = sorted(idx, key=lambda s: idx[s].start())
     sec = {}
@@ -342,7 +389,12 @@ def plan_parse(path: str) -> int:
         end = idx[order[i + 1]].start() if i + 1 < len(order) else len(text)
         sec[s] = text[idx[s].end():end].strip()
     files = [f.strip().strip("`") for f in re.split(r"[,\n]", sec.get("FILES_TO_READ", "")) if f.strip()][:10]
-    files = [f for f in files if (ROOT / f).exists() and ".." not in f and not f.startswith(("/", "\\"))]
+    clean = []
+    for f in files:
+        v = _safe_rel(f)
+        if v:
+            clean.append(v)
+    files = clean
     info = json.loads((STATE / "current_model.json").read_text()) if (STATE / "current_model.json").exists() else {}
     xh = resp.get("x_helper") or {}
     if xh.get("model"):                          # the model that actually answered
