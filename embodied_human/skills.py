@@ -1602,18 +1602,10 @@ class SkillSystem:
                      "spine_bend": 0.0, "chest_bend": 0.0},
                     3.0, lambda: self._rec_com() > 0.25, "hand-plant",
                     proceed=lambda: True)
-                # Cobra: arch the strong back extensors to lift the chest while
-                # the pelvis stays pinned (prone legs give no leverage, so the
-                # back — not the arms — does the lifting).
-                yield from self._rec_hold(
-                    {"spine_bend": -0.30, "chest_bend": -0.20,
-                     "elbow_l": -0.05, "elbow_r": -0.05,
-                     "sh_l_flex": 0.10, "sh_r_flex": 0.10,
-                     "hip_l_flex": 0.15, "hip_r_flex": 0.15,
-                     "knee_l": 0.15, "knee_r": 0.15,
-                     "ankle_l_flex": 0.30, "ankle_r_flex": 0.30},
-                    4.0, lambda: self._rec_com() > 0.30, "cobra",
-                    proceed=lambda: self._rec_com() > 0.24)
+                # Cobra pump: a single arch rocks up and slams back, so pump
+                # it (~0.6 Hz, like pushing a swing) while ratcheting the
+                # knees under; each bounce starts a little higher.
+                yield from self._rec_cobra()
             # Knees under: from a raised chest, drag the knees forward under
             # the hips (gravity helps now) into all-fours/kneel.
             yield from self._rec_hold(
