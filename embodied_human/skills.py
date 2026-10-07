@@ -588,6 +588,11 @@ class SkillSystem:
 
     def lean_exempt(self) -> np.ndarray | None:
         """Trunk joints the arms are deliberately using to lean."""
+        if getattr(self, "recovery_active", False):
+            # Fall recovery drives the whole body through its stages; the
+            # postural-priority attenuator (which fires constantly while down)
+            # must not steal the legs and trunk back to nominal mid-stand-up.
+            return np.ones(self.agent.meta.n_actuators, bool)
         if not any(self.arm[s].active and self.arm[s].use_trunk for s in "lr"):
             return None
         ex = np.zeros(self.agent.meta.n_actuators, bool)
