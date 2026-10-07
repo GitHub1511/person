@@ -1045,6 +1045,17 @@ class EmbodiedHuman:
     def _count_state(self) -> dict:
         tax = self.receptors.tactile.n_taxels
         nj = self.meta.n_actuators
+        rc = self.receptors
+        cells = (rc.spindles.size + rc.vest_cells.size + rc.cochlea.size + rc.olfactory.size
+                 + rc.gustatory.size + (rc.visual.retina.size if rc.visual.enabled else 0))
+        inner = self.inner.n_state if self.inner is not None else 0
+        base = self._count_state_base(tax, nj)
+        base["cell_populations"] = int(cells)
+        base["inner_world_dynamic_state"] = int(inner)
+        base["total"] += int(cells) + int(inner)
+        return base
+
+    def _count_state_base(self, tax: int, nj: int) -> dict:
         return {
             "tactile_channels": tax * R.N_TACTILE_CH,
             "proprioceptive_channels": nj * R.N_PROPRIO_CH,
