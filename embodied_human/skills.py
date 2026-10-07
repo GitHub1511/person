@@ -1589,7 +1589,12 @@ class SkillSystem:
                  "elbow_l": -1.00, "elbow_r": -1.00},
                 0.1, lambda: False, "curl", proceed=lambda: True)
             yield from self._rec_extract()
-            yield from self._rec_roll()
+            table_ok = yield from self._rec_table_assist()
+            if table_ok:
+                self._rec_caught = True
+                self.events.append("stand_up: table climb worked, kneeling")
+            else:
+                yield from self._rec_roll()
             if self._rec_caught:
                 # Caught a big roll onto the folded knees: straight to kneel.
                 self.events.append("stand_up: caught the roll, kneeling")
