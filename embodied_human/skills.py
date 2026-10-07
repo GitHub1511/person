@@ -1737,20 +1737,76 @@ class SkillSystem:
         if self._rec_chest_face_z() < -0.50 or self._rec_com() > 0.35:
             return
 
-        def pose(sign, pump=1.0):
-            p = {"spine_twist": sign * 0.45, "chest_twist": sign * 0.40,
-                 "spine_side": sign * 0.20, "spine_bend": 0.30,
-                 "chest_bend": 0.15}
-            top = "l" if sign > 0 else "r"
-            bot = "r" if sign > 0 else "l"
-            swing = 0.55 + 0.45 * pump
-            p.update({f"hip_{top}_flex": -1.40 * swing, f"knee_{top}": 1.80 * swing,
-                      f"hip_{top}_abd": 0.25,
-                      f"hip_{bot}_flex": -0.80, f"knee_{bot}": 1.20,
-                      f"sh_{top}_flex": 2.20, f"elbow_{top}": -0.20,
-                      f"sh_{bot}_flex": 0.80, f"elbow_{bot}": -0.90})
-            return p
-        self._rec_roll_pose = pose
+    def _rec_roll_pose(self, sign, pump=1.0):
+        p = {"spine_twist": sign * 0.45, "chest_twist": sign * 0.40,
+             "spine_side": sign * 0.20, "spine_bend": 0.30,
+             "chest_bend": 0.15}
+        top = "l" if sign > 0 else "r"
+        bot = "r" if sign > 0 else "l"
+        swing = 0.55 + 0.45 * pump
+        p.update({f"hip_{top}_flex": -1.40 * swing, f"knee_{top}": 1.80 * swing,
+                  f"hip_{top}_abd": 0.25,
+                  f"hip_{bot}_flex": -0.80, f"knee_{bot}": 1.20,
+                  f"sh_{top}_flex": 2.20, f"elbow_{top}": -0.20,
+                  f"sh_{bot}_flex": 0.80, f"elbow_{bot}": -0.90})
+        return p
+
+    def _rec_furniture_gap(self) -> float:
+        """Horizontal distance from the body to the nearest furniture edge
+        (negative = underneath it). Rising under a table just bangs into it."""
+        try:
+            w = self.agent.skills.world
+            c = w.body_pos()
+            best = 1e9
+            for f in w.furniture.values():
+                dx = abs(c[0] - f["x"]) - f["hx"]
+                dy = abs(c[1] - f["y"]) - f["hy"]
+                best = min(best, max(dx, dy))
+            return float(best)
+        except Exception:
+            return 1e9
+
+    def _rec_extract(self):
+        """Roll out from under furniture before trying to rise."""
+        ag = self.agent
+        if self._rec_furniture_gap() > 0.25:
+            return
+        self.events.append("stand_up: under furniture, rolling clear first")
+        sign = 1.0
+        t0 = ag.t
+        last_flip = ag.t
+        best = self._rec_furniture_gap()
+        while ag.t - t0 < 14.0:
+            if self._rec_furniture_gap() > 0.25:
+                self.events.append("stand_up: clear of furniture")
+                return
+            pump = 0.55 + 0.45 * float(np.sin(2 * np.pi * 0.8 * (ag.t - t0)))
+            if ag.t - last_flip > 2.5:
+                if self._rec_furniture_gap() > best + 0.03:
+                    best = self._rec_furniture_gap()
+                else:
+                    sign = -sign
+                    best = self._rec_furniture_gap()
+                last_flip = ag.t
+            full = dict(self.q_nom_map)
+            full.update(self._rec_roll_pose(sign, pump))
+            self._rec_set({nm: tv for nm, tv in full.items()
+                           if nm in ag.meta.qpos_addr})
+            yield
+        self.events.append("stand_up: still near furniture, trying anyway")
+
+    def _rec_roll(self):
+        """Roll until prone (chest-back faces up) or the COM lifts.
+
+        Side-lying is a stable equilibrium far stronger than the spine-twist
+        motors, so the roll uses the heavy levers: one leg swings over the
+        body while the opposite arm reaches overhead, and the twist follows.
+        Two mirror poses alternate every ~2.5 s; whichever raises the chest
+        is kept (hill-climbing on the live orientation).
+        """
+        ag = self.agent
+        if self._rec_chest_face_z() < -0.50 or self._rec_com() > 0.35:
+            return
 
         sign = 1.0 if self._recover_attempts % 2 == 1 else -1.0
         t0 = ag.t
