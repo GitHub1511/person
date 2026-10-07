@@ -8,11 +8,13 @@
 #                    1000/day) for the single most valuable next step, as a full prompt for a coder; the
 #                    planner may also name web pages, which are fetched read-only and attached
 #                 3. snapshots the editable files and writes state/next_task.md
-#                 4. waits for your coder (any tool: it reads next_task.md, works in the project directory
-#                    with its own shell, and finishes with `helper.sh done`)
+#                 4. runs the Pi coder itself (AUTO_CODER=1, default) inside the permission guard,
+#                    or waits for your coder (AUTO_CODER=0: it reads next_task.md and ends with
+#                    `helper.sh done`)
 #                 5. verifies the result (compiles, imports at base and rich, smoke run, helper/key
 #                    untouched); on FAIL it rolls the files back; records the outcome; goes to 1
 #   plan        just step 1-3 once
+#   coder       run just the Pi coder step once (needs state/next_task.md)
 #   done        tell `run` the coder has finished (or `touch state/CODER_DONE`)
 #   verify      PASS / FAIL for the current tree        rollback   undo back to the snapshot
 #   snapshot    snapshot now                            resources  how many simulations fit right now
@@ -21,9 +23,9 @@
 #   status      usage today, last plan, last verification   stop   ask a running `run`/`serve` to exit
 #
 # Knobs (environment): RUN_WAIT_TIMEOUT (seconds to wait for a coder per step, default 21600),
-#   AUTO_ROLLBACK=1 (default) roll back a failed step, PLAN_TIMEOUT, OR_PORT, HELPER_ROOT.
+#   AUTO_ROLLBACK=1 (default) roll back a failed step, PLAN_TIMEOUT, OR_PORT, HELPER_ROOT,
+#   AUTO_CODER=1 (default) start Pi itself, CODER_TIMEOUT (default 3600), PI_MAX_TOOL_CALLS (400).
 # The API key is read from tools/openrouter_helper/.env (or $OPENROUTER_API_KEY) and is never printed.
-# This script never launches a coding agent itself: that is the one step it leaves to you.
 
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,6 +44,8 @@ fi
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 hl() { "$PY" "$HERE/hlib.py" "$@"; }
 proxy_up() { curl -sf --max-time 3 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; }
+# Portable short sleep (macOS / Git-Bash sleep may not take fractions).
+sleep_short() { "$PY" -c "import time;time.sleep(0.25)" 2>/dev/null || sleep 1; }
 
 proxy_start() {
   proxy_up && return 0
@@ -50,15 +54,20 @@ proxy_start() {
   fi
   nohup "$PY" "$HERE/proxy.py" --port "$PORT" >>"$STATE/proxy.log" 2>&1 &
   echo $! >"$STATE/proxy.pid"
-  for _ in $(seq 1 40); do proxy_up && return 0; sleep 0.25; done
+  for _ in $(seq 1 40); do proxy_up && return 0; sleep_short; done
   log "gateway did not start; see $STATE/proxy.log"; return 1
 }
 
 proxy_stop() {
-  if [ -f "$STATE/proxy.pid" ]; then kill "$(cat "$STATE/proxy.pid")" 2>/dev/null; rm -f "$STATE/proxy.pid"; fi
+  if [ -f "$STATE/proxy.pid" ]; then
+    pid="$(cat "$STATE/proxy.pid" 2>/dev/null | tr -cd '0-9' | head -c 10)"
+    if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; fi
+    rm -f "$STATE/proxy.pid"
+  fi
 }
 
-json_get() { sed -n "s/.*\"$1\": *\"\{0,1\}\([^\",}]*\)\"\{0,1\}.*/\1/p" | head -1; }
+# JSON field extraction via python (sed on JSON breaks on whitespace/nesting).
+json_get() { "$PY" -c "import json,sys;print(json.load(sys.stdin).get('$1',''))" 2>/dev/null | head -1; }
 
 cmd_plan() {
   proxy_start || return 1
@@ -81,7 +90,8 @@ cmd_plan() {
 }
 
 seconds_to_wait_for_quota() {
-  curl -s "http://127.0.0.1:$PORT/current" | sed -n 's/.*"retry_after": *\([0-9]*\).*/\1/p' | head -1
+  curl -sf --max-time 5 "http://127.0.0.1:$PORT/current" 2>/dev/null \
+    | "$PY" -c "import json,sys;print(json.load(sys.stdin).get('retry_after',''))" 2>/dev/null | head -1
 }
 
 wait_for_coder() {
@@ -96,6 +106,8 @@ wait_for_coder() {
 }
 
 winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
+have_timeout() { command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; }
+timeout_cmd() { if command -v timeout >/dev/null 2>&1; then printf 'timeout'; else printf 'gtimeout'; fi; }
 
 # Run the Pi coding agent on state/next_task.md, inside the permission guard (pi_agent/extensions/guard.ts):
 # - its model is the local gateway only (order, 200/model, 20/min, 1000/day all still apply)
@@ -104,26 +116,42 @@ winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else pr
 # - a tool-call budget and a wall-clock limit; every call is logged to state/pi_audit.jsonl
 coder_run() {
   command -v pi >/dev/null 2>&1 || { log "pi is not installed; waiting for a manual coder instead"; return 1; }
+  [ -f "$STATE/next_task.md" ] || { log "no $STATE/next_task.md; run 'helper.sh plan' first"; return 1; }
   local home="$STATE/pi_home"
   mkdir -p "$home" "$STATE/pi_sessions"
   cp -f "$HERE/pi_agent/settings.json" "$HERE/pi_agent/APPEND_SYSTEM.md" "$home/"
-  sed "s#http://127.0.0.1:8765/v1#http://127.0.0.1:$PORT/v1#" "$HERE/pi_agent/models.json" >"$home/models.json"
+  "$PY" -c "import json;cfg=json.load(open(r'$HERE/pi_agent/models.json'));s=json.dumps(cfg).replace('http://127.0.0.1:8765/v1','http://127.0.0.1:$PORT/v1');open(r'$home/models.json','w').write(s)" \
+    || sed "s#http://127.0.0.1:8765/v1#http://127.0.0.1:$PORT/v1#" "$HERE/pi_agent/models.json" >"$home/models.json"
   local wroot wstate
   wroot="$(winpath "$ROOT")"; wstate="$(winpath "$STATE")"
   log "starting the Pi coder (limit ${CODER_TIMEOUT:-3600}s, guard on, audit: $STATE/pi_audit.jsonl)"
-  env -u OPENROUTER_API_KEY \
-      PI_CODING_AGENT_DIR="$(winpath "$home")" PI_OFFLINE=1 HELPER_ROOT="$wroot" HELPER_STATE="$wstate" \
-      PI_MAX_TOOL_CALLS="${PI_MAX_TOOL_CALLS:-400}" \
-    timeout "${CODER_TIMEOUT:-3600}" pi -p --no-approve --no-context-files --no-skills --no-prompt-templates \
-      --no-themes --no-mcp --no-extensions -e "$(winpath "$HERE/pi_agent/extensions/guard.ts")" \
-      --session-dir "$(winpath "$STATE/pi_sessions")" \
-      --tools read,bash,edit,write,grep,find,ls \
-      "@$(winpath "$STATE/next_task.md")" \
-      "Carry out the task in the attached file, then finish with the report it asks for." \
-      >"$STATE/pi_last_output.txt" 2>&1
+  if have_timeout; then
+    env -u OPENROUTER_API_KEY \
+        PI_CODING_AGENT_DIR="$(winpath "$home")" PI_OFFLINE=1 HELPER_ROOT="$wroot" HELPER_STATE="$wstate" \
+        PI_MAX_TOOL_CALLS="${PI_MAX_TOOL_CALLS:-400}" \
+      "$(timeout_cmd)" "${CODER_TIMEOUT:-3600}" pi -p --no-approve --no-context-files --no-skills --no-prompt-templates \
+        --no-themes --no-mcp --no-extensions -e "$(winpath "$HERE/pi_agent/extensions/guard.ts")" \
+        --session-dir "$(winpath "$STATE/pi_sessions")" \
+        --tools read,bash,edit,write,grep,find,ls \
+        "@$(winpath "$STATE/next_task.md")" \
+        "Carry out the task in the attached file, then finish with the report it asks for." \
+        >"$STATE/pi_last_output.txt" 2>&1
+  else
+    log "no GNU timeout found; running Pi without a wall-clock limit (tool-call budget still applies)"
+    env -u OPENROUTER_API_KEY \
+        PI_CODING_AGENT_DIR="$(winpath "$home")" PI_OFFLINE=1 HELPER_ROOT="$wroot" HELPER_STATE="$wstate" \
+        PI_MAX_TOOL_CALLS="${PI_MAX_TOOL_CALLS:-400}" \
+      pi -p --no-approve --no-context-files --no-skills --no-prompt-templates \
+        --no-themes --no-mcp --no-extensions -e "$(winpath "$HERE/pi_agent/extensions/guard.ts")" \
+        --session-dir "$(winpath "$STATE/pi_sessions")" \
+        --tools read,bash,edit,write,grep,find,ls \
+        "@$(winpath "$STATE/next_task.md")" \
+        "Carry out the task in the attached file, then finish with the report it asks for." \
+        >"$STATE/pi_last_output.txt" 2>&1
+  fi
   local rc=$?
   log "Pi coder finished (exit $rc); output in $STATE/pi_last_output.txt"
-  return 0
+  return $rc
 }
 
 cmd_run() {
@@ -147,7 +175,7 @@ cmd_run() {
       continue
     fi
     fails=0
-    title=$("$PY" -c "import json;print(json.load(open('$STATE/next_plan.json'))['title'])" 2>/dev/null || echo "?")
+    title=$("$PY" -c "import json;print(json.load(open(r'$STATE/next_plan.json'))['title'])" 2>/dev/null || echo "?")
     if [ "${AUTO_CODER:-1}" = "1" ] && coder_run; then :; else wait_for_coder; fi
     # even when asked to stop, never leave a step unverified: check it (and undo it if broken) first
     out=$(hl verify); echo "$out"
@@ -176,7 +204,7 @@ cmd_serve() {
 }
 
 cmd_status() {
-  if proxy_up; then curl -s "http://127.0.0.1:$PORT/current"; echo
+  if proxy_up; then curl -sf --max-time 5 "http://127.0.0.1:$PORT/current" 2>/dev/null; echo
   else echo "gateway not running"; [ -f "$STATE/usage.json" ] && cat "$STATE/usage.json"; echo; fi
   [ -f "$STATE/next_plan.json" ] && { echo "last plan:"; cat "$STATE/next_plan.json"; echo; }
   [ -f "$STATE/last_verify.json" ] && { echo "last verify:"; head -c 600 "$STATE/last_verify.json"; echo; }
