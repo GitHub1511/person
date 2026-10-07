@@ -197,6 +197,134 @@ SELF_REGIONS: list[tuple[str, str, tuple, np.ndarray]] = [
 SELF_ACTIONS = ("rest", "rub", "tap", "scratch")
 
 
+# --------------------------------------------------------------------------
+# Names for the mind: ``express(head="left", lids="squint", left_arm="wave_pose", ...)``
+# --------------------------------------------------------------------------
+def _nearest(arr, v) -> int:
+    return int(np.argmin(np.abs(np.asarray(arr, float) - float(v))))
+
+
+_DIRS = {  # name -> (yaw, pitch)   yaw + = to the person's left, pitch + = down
+    "forward": (0.0, 0.0), "left": (0.55, 0.0), "right": (-0.55, 0.0), "up": (0.0, -0.35),
+    "down": (0.0, 0.40), "left_up": (0.5, -0.30), "right_up": (-0.5, -0.30),
+    "left_down": (0.5, 0.35), "right_down": (-0.5, 0.35), "far_left": (0.8, 0.0),
+    "far_right": (-0.8, 0.0), "away_left": (0.7, 0.1), "away_right": (-0.7, 0.1),
+}
+_TORSO = {"upright": (0.05, 0.0, 0.0), "slouch": (0.28, 0.0, 0.0), "lean_forward": (0.18, 0.0, 0.0),
+          "lean_back": (-0.08, 0.0, 0.0), "twist_left": (0.05, 0.0, 0.3), "twist_right": (0.05, 0.0, -0.3),
+          "lean_left": (0.05, 0.14, 0.0), "lean_right": (0.05, -0.14, 0.0), "bow": (0.34, 0.0, 0.0)}
+_STANCE = {"normal": (0.0, 0.0, 0.0), "crouch": (-0.04, 0.0, 0.0), "deep_crouch": (-0.08, 0.0, 0.0),
+           "shift_left": (0.0, 0.03, 0.0), "shift_right": (0.0, -0.03, 0.0), "lean_in": (0.0, 0.0, 0.02),
+           "lean_back": (0.0, 0.0, -0.015)}
+_STYLE = {  # name -> (speed idx, amp idx, tremor idx, rhythm idx)
+    "normal": (2, 2, 0, 0), "slow": (0, 2, 0, 0), "fast": (3, 2, 0, 0), "trembling": (2, 1, 3, 0),
+    "sway": (1, 2, 0, 2), "pulse": (2, 2, 0, 1), "small": (2, 0, 0, 0), "large": (2, 3, 0, 0),
+    "gentle": (1, 1, 0, 0), "restless": (3, 1, 1, 3),
+}
+_JAW = {"closed": 0, "slightly_open": 1, "open": 3, "wide": 5}
+
+
+def build_from_names(space: "BehaviorSpace", **kw) -> tuple[np.ndarray, list[str]]:
+    """Descriptor from human-readable choices.  Unknown names are reported, not fatal."""
+    d = space.neutral()
+    ci = space.channel_index
+    errors: list[str] = []
+
+    def bad(k, v, options):
+        errors.append(f"{k}={v!r} is not one of: {', '.join(options)}")
+
+    for k, v in kw.items():
+        try:
+            if k == "head":
+                if v not in _DIRS:
+                    bad(k, v, _DIRS); continue
+                y, p = _DIRS[v]
+                d[ci["head"]] = np.ravel_multi_index((_nearest(HEAD_YAW, y), _nearest(HEAD_PITCH, p), 3),
+                                                     (len(HEAD_YAW), len(HEAD_PITCH), len(HEAD_TILT)))
+            elif k == "tilt":
+                tl = {"left": 0.28, "right": -0.28, "none": 0.0}
+                if v not in tl:
+                    bad(k, v, tl); continue
+                y, p, _ = np.unravel_index(int(d[ci["head"]]), (len(HEAD_YAW), len(HEAD_PITCH), len(HEAD_TILT)))
+                d[ci["head"]] = np.ravel_multi_index((y, p, _nearest(HEAD_TILT, tl[v])),
+                                                     (len(HEAD_YAW), len(HEAD_PITCH), len(HEAD_TILT)))
+            elif k in ("gaze", "eyes"):
+                if v not in _DIRS:
+                    bad(k, v, _DIRS); continue
+                y, p = _DIRS[v]
+                d[ci["eyes"]] = np.ravel_multi_index((_nearest(GAZE_YAW, y), _nearest(GAZE_PITCH, p * 0.8)),
+                                                     (len(GAZE_YAW), len(GAZE_PITCH)))
+            elif k == "lids":
+                if v not in LID_APERTURE_NAMES:
+                    bad(k, v, LID_APERTURE_NAMES + ("closed",)); continue
+                a = LID_APERTURE_NAMES.index(v)
+                _, b = np.unravel_index(int(d[ci["lids"]]), (len(LID_APERTURE), len(BLINK_PATTERNS)))
+                d[ci["lids"]] = np.ravel_multi_index((a, b), (len(LID_APERTURE), len(BLINK_PATTERNS)))
+            elif k == "blink":
+                if v not in BLINK_PATTERNS:
+                    bad(k, v, BLINK_PATTERNS); continue
+                a, _ = np.unravel_index(int(d[ci["lids"]]), (len(LID_APERTURE), len(BLINK_PATTERNS)))
+                d[ci["lids"]] = np.ravel_multi_index((a, BLINK_PATTERNS.index(v)), (len(LID_APERTURE), len(BLINK_PATTERNS)))
+            elif k in ("mouth", "voice"):
+                j, vo = np.unravel_index(int(d[ci["mouth"]]), (len(JAW_LEVELS), len(VOCALS)))
+                if k == "mouth":
+                    if v not in _JAW:
+                        bad(k, v, _JAW); continue
+                    j = _JAW[v]
+                else:
+                    if v not in VOCALS:
+                        bad(k, v, VOCALS); continue
+                    vo = VOCALS.index(v)
+                d[ci["mouth"]] = np.ravel_multi_index((j, vo), (len(JAW_LEVELS), len(VOCALS)))
+            elif k == "torso":
+                if v not in _TORSO:
+                    bad(k, v, _TORSO); continue
+                b_, s_, t_ = _TORSO[v]
+                d[ci["torso"]] = np.ravel_multi_index((_nearest(TORSO_BEND, b_), _nearest(TORSO_SIDE, s_),
+                                                       _nearest(TORSO_TWIST, t_)),
+                                                      (len(TORSO_BEND), len(TORSO_SIDE), len(TORSO_TWIST)))
+            elif k in ("left_arm", "right_arm"):
+                names = [n for n, _, _ in ARM_SCHEMAS]
+                if v not in names:
+                    bad(k, v, names); continue
+                d[ci[("l" if k == "left_arm" else "r") + "_schema"]] = names.index(v)
+            elif k in ("left_hand", "right_hand"):
+                names = [n for n, _, _ in HAND_SHAPES]
+                if v not in names:
+                    bad(k, v, names); continue
+                d[ci[("l" if k == "left_hand" else "r") + "_hand"]] = names.index(v)
+            elif k == "stance":
+                if v not in _STANCE:
+                    bad(k, v, _STANCE); continue
+                h, l, f = _STANCE[v]
+                d[ci["stance"]] = np.ravel_multi_index((_nearest(STANCE_HEIGHT, h), _nearest(STANCE_LATERAL, l),
+                                                        _nearest(STANCE_FORWARD, f)),
+                                                       (len(STANCE_HEIGHT), len(STANCE_LATERAL), len(STANCE_FORWARD)))
+            elif k == "style":
+                if v not in _STYLE:
+                    bad(k, v, _STYLE); continue
+                d[ci["style"]] = np.ravel_multi_index(_STYLE[v], (len(STYLE_SPEED), len(STYLE_AMP),
+                                                                  len(STYLE_TREMOR), len(STYLE_RHYTHM)))
+            elif k in ("hold", "seconds"):
+                d[ci["hold"]] = _nearest(HOLD_SECONDS, v)
+            else:
+                errors.append(f"unknown part '{k}' (try head tilt gaze lids blink mouth voice torso "
+                              f"left_arm right_arm left_hand right_hand stance style hold)")
+        except Exception as exc:                       # a malformed value must never crash the body
+            errors.append(f"{k}: {exc}")
+    return d, errors
+
+
+def option_names() -> dict:
+    """The vocabulary ``express`` understands (for the mind's prompt)."""
+    return {
+        "head": list(_DIRS), "gaze": list(_DIRS), "lids": list(LID_APERTURE_NAMES),
+        "blink": list(BLINK_PATTERNS), "mouth": list(_JAW), "voice": list(VOCALS),
+        "torso": list(_TORSO), "arms": [n for n, _, _ in ARM_SCHEMAS],
+        "hands": [n for n, _, _ in HAND_SHAPES], "stance": list(_STANCE), "style": list(_STYLE),
+    }
+
+
 @dataclass
 class Channel:
     name: str
