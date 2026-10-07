@@ -117,6 +117,13 @@ PRESETS: dict[str, Complexity] = {
 }
 
 
+# The two top levels keep the classic body at ``max`` size and add the plug-in subsystems of
+# :mod:`ultra` (ultra: sized for a handful of parallel instances; mega: one instance, as big
+# as the machine allows).  Nothing in the classic modules reads anything but the fields above.
+PRESETS["ultra"] = Complexity(**{**asdict(PRESETS["max"]), "name": "ultra"})
+PRESETS["mega"] = Complexity(**{**asdict(PRESETS["max"]), "name": "mega"})
+
+
 def _from_overrides(base: Complexity, data: dict) -> Complexity:
     valid = {f.name for f in fields(Complexity)}
     kw = {k: v for k, v in data.items() if k in valid}
