@@ -185,35 +185,36 @@ def default_scene_objects() -> list[SceneObject]:
     Everything starts resting on the workbench.
     """
     top = surface_top("table")
+    ty = TABLE_Y
     return [
         SceneObject(
-            name="mug", kind="cylinder", pos=(0.22, -0.60, top + 0.057), size=(0.040, 0.055),
+            name="mug", kind="cylinder", pos=(0.22, ty + 0.22, top + 0.057), size=(0.040, 0.055),
             rgba=(0.92, 0.93, 0.95, 1.0), mass=0.35, temperature=62.0,
             odor=_odor((2, 0.9), (7, 0.5), (13, 0.3)),          # coffee-ish
             taste=_odor((3, 0.85), (2, 0.15), dim=5),           # bitter
             label="hot mug of coffee",
         ),
         SceneObject(
-            name="apple", kind="sphere", pos=(-0.20, -0.60, top + 0.044), size=(0.042,),
+            name="apple", kind="sphere", pos=(-0.20, ty + 0.22, top + 0.044), size=(0.042,),
             rgba=(0.85, 0.18, 0.16, 1.0), mass=0.18, temperature=21.0,
             odor=_odor((1, 0.8), (5, 0.6), (11, 0.4)),
             taste=_odor((0, 0.75), (2, 0.45), dim=5),           # sweet + sour
             label="apple",
         ),
         SceneObject(
-            name="stone", kind="box", pos=(0.02, -0.70, top + 0.032),
+            name="stone", kind="box", pos=(0.02, ty + 0.12, top + 0.032),
             size=(0.055, 0.045, 0.030), rgba=(0.45, 0.45, 0.47, 1.0),
             mass=0.9, temperature=17.0, friction=(0.9, 0.02, 0.001),
             odor=_odor((20, 0.2)), label="cold stone",
         ),
         SceneObject(
-            name="cushion", kind="box", pos=(0.36, -0.80, top + 0.037),
+            name="cushion", kind="box", pos=(0.36, ty + 0.02, top + 0.037),
             size=(0.10, 0.10, 0.035), rgba=(0.30, 0.42, 0.70, 1.0), mass=0.25,
             temperature=24.0, compliance=0.9,
             odor=_odor((9, 0.35), (16, 0.25)), label="soft cushion",
         ),
         SceneObject(
-            name="sphere_toy", kind="sphere", pos=(-0.34, -0.98, top + 0.032),
+            name="sphere_toy", kind="sphere", pos=(-0.34, ty - 0.16, top + 0.032),
             size=(0.030,), rgba=(0.95, 0.75, 0.15, 1.0), mass=0.05,
             temperature=23.0, odor=_odor((4, 0.5)), label="small ball",
         ),
