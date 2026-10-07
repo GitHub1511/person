@@ -1828,7 +1828,7 @@ class SkillSystem:
                      "spine_bend": 0.05, "chest_bend": 0.0,
                      "sh_l_flex": 0.20, "sh_r_flex": 0.20,
                      "elbow_l": -0.40, "elbow_r": -0.40},
-                    6.0, lambda: self._rec_com() > 0.60, "lunge-press")
+                    10.0, lambda: self._rec_com() > 0.60, "lunge-press")
                 self._rec_pressed = True
                 self.events.append("stand_up: pressed up from lunge")
             elif table_ok:
