@@ -48,8 +48,8 @@ sk = ag.skills
 sk._auto_recover_t = 1e9  # only the explicit attempt runs
 sk.api_stand_up()
 labels = ["down"]
-steps = [1999, 3999, 5999, 7999, 9999, 11999, 15999, 19999, 23999, 27999]
-for i in range(30000):
+steps = [999, 4999, 9999, 14999, 19999, 24999, 29999, 34999]
+for i in range(36000):
     ag.step()
     if i in steps:
         snap()
