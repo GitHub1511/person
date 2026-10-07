@@ -377,6 +377,49 @@ class ArmServo:
         self.shortfall = shortfall
 
 # --------------------------------------------------------------------------
+# Hearing: what is said to the person passes through toy-model ears first.
+# --------------------------------------------------------------------------
+# A heard utterance is a pressure event at two ears on a body in a room, not a
+# string in a prompt.  HeardEvent carries the degraded percept (words lost to
+# distance/masking shown as [...]) plus the cochlear snapshot and a confidence.
+# The raw string is the experimenter's ground truth: it is kept for science on
+# the event object but NEVER rendered to the mind.  Degradation only ever
+# DELETES information; nothing here substitutes, corrects, or invents words.
+SPEED_OF_SOUND = 343.0            # m/s, conduction delay
+VOICE_BASE_AMP = 2.2              # calibrated so a normal voice at the
+                                  # interview chair (~1.6 m) lands at conf ~0.85
+# Fixed, documented speaker spots (world.from_ego forward/left/up in metres).
+CHAIR_OFFSET = (1.6, 0.9, 1.4)    # the interview chair, ahead-left
+
+
+@dataclass
+class HeardEvent:
+    raw: str                  # experimenter-side truth; never shown to the mind
+    heard: str                # degraded percept; lost words shown as [...]
+    conf: float               # 0..1 toy-model confidence, from SNR + distance
+    dist_m: float             # source distance at delivery
+    az_deg: float             # source azimuth, + = left
+    itd_ms: float             # cochlear snapshot: arrival-time difference
+    ild: float                # cochlear snapshot: level difference
+    loud: float               # voice loudness at the ear
+    t_arrive: float           # sim time the first syllable reached the ear
+    dur: float                # utterance duration, syllable-timed
+    masked: int               # words replaced by [...]
+
+
+def _dropout_key(word: str, tick: int, index: int) -> float:
+    """Deterministic [0,1) draw per (word, time, position).
+
+    hashlib, not hash(): Python's hash() is salted per process, so hash()
+    would make the *same* utterance heard differently on every run.  Same
+    physics, same percept -- the experiment must repeat.
+    """
+    import hashlib
+    h = hashlib.md5(f"{word}\x00{tick}\x00{index}".encode("utf-8")).digest()
+    return int.from_bytes(h[:4], "little") / 2 ** 32
+
+
+# --------------------------------------------------------------------------
 # The skill system
 # --------------------------------------------------------------------------
 class SkillSystem:
@@ -393,7 +436,8 @@ class SkillSystem:
         self.current_started = 0.0
         self._lock = threading.RLock()
         self.events: list[str] = []
-        self.heard: list[str] = []            # speech from outside, for the mind
+        self.heard: list[HeardEvent] = []   # degraded percepts, for the mind
+        self._pending_voice: list[dict] = []  # utterances in flight (conduction)
         self.social_pulse = 0.0               # decaying social stimulus, feeds affect
         self.touching = None                  # (region, side, action, phase) while self-touching
         self.gaze = None                      # None | ("point", xyz) | ("object", name)
@@ -440,13 +484,101 @@ class SkillSystem:
     # ==================================================================
     # per-physics-step hooks
     # ==================================================================
-    def hear(self, text: str) -> None:
-        """Something is said to the person.  It is heard (audio-wise the cochlear
-        model sees nothing, there is no acoustic field) and handed to the mind."""
+    def hear(self, text: str, *, where=None, level: float = 1.0) -> None:
+        """Someone speaks to the person.  TOY-MODEL ears: the utterance is
+        scheduled as a virtual sound event through the cochlea (conduction
+        delay, distance falloff, head shadow, masking); the mind later receives
+        the degraded percept plus a confidence -- never the raw string.
+
+        `where`: speaker position (world xyz), the string "chair" for the
+        documented interview chair, or None for the chair.  `level`: voice
+        loudness multiplier (1.0 normal, ~0.3 whisper).
+        """
+        from .speech import plan_utterance
         text = " ".join(str(text).split())[:300]
-        if text:
-            self.heard.append(text)
-            self.social_pulse = 1.0
+        if not text:
+            return
+        ag = self.agent
+        try:
+            u = plan_utterance(text)
+            spk = self._speaker_pos(where)
+            dist = float(np.linalg.norm(spk - self.world.head_pos()))
+            delay = dist / SPEED_OF_SOUND
+            amp = float(level) * VOICE_BASE_AMP
+            try:
+                ag.receptors.cochlea.add_event(spk, amp, ag.t + delay,
+                                               dur=u.duration + 0.3,
+                                               slope=1.2, kind="voice")
+            except Exception:
+                pass
+            self._pending_voice.append(dict(raw=text, utt=u, spk=spk, dist=dist,
+                                            amp=amp, t_ready=ag.t + delay,
+                                            dur=u.duration))
+        except Exception:
+            # Hearing must never break the sim: if anything above fails, the
+            # utterance is simply not heard (silence is always valid data).
+            return
+        # NOTE: social_pulse is NOT set here any more.  It is set at delivery,
+        # scaled by audibility -- a whisper is not a shout, and an inaudible
+        # utterance delivers nothing at all (no heard entry, no poke).
+
+    def _speaker_pos(self, where=None) -> np.ndarray:
+        """Resolve a speaker position to world xyz."""
+        if isinstance(where, str):
+            if where == "chair":
+                return np.asarray(self.world.from_ego(*CHAIR_OFFSET), float)
+            return np.asarray(self.world.from_ego(*CHAIR_OFFSET), float)
+        if where is not None:
+            try:
+                return np.asarray(where, float).reshape(3)
+            except Exception:
+                pass
+        return np.asarray(self.world.from_ego(*CHAIR_OFFSET), float)
+
+    def _deliver_voice(self, raw: str, utt, spk: np.ndarray, dist: float,
+                       amp: float, t_ready: float, dur: float) -> None:
+        """Convert an arrived utterance into a HeardEvent (deletion only)."""
+        try:
+            coch = self.agent.receptors.cochlea
+            loud_now = float(np.log1p(amp * 20.0 / (dist * dist + 0.05)))
+            try:
+                noise = float(np.asarray(coch.level).sum())
+            except Exception:
+                noise = 0.0
+            speaking = bool(self.speech.speaking or self.speech.jaw > 1e-3)
+            snr = loud_now - 0.5 * noise - (0.6 if speaking else 0.0)
+            conf = float(1.0 / (1.0 + np.exp(-(snr - 1.1) * 2.2)))
+            if conf < 0.25:
+                return                    # inaudible: no entry, no poke, silence
+            words = raw.split(" ")
+            keep_p = float(np.clip(conf, 0.05, 0.95))
+            tick = int(t_ready * 10)
+            heard_w, masked = [], 0
+            for i, wd in enumerate(words):
+                if _dropout_key(wd, tick, i) < keep_p or conf > 0.9:
+                    heard_w.append(wd)
+                else:
+                    heard_w.append("[...]")
+                    masked += 1
+            try:
+                fwd, lft, _up = self.world.to_ego(spk)
+                az = float(np.degrees(np.arctan2(lft, max(fwd, 1e-6))))
+            except Exception:
+                az = 0.0
+            try:
+                itd = float(getattr(coch, "last_itd", 0.0))
+                ild = float(getattr(coch, "last_ild", 0.0))
+            except Exception:
+                itd, ild = 0.0, 0.0
+            self.heard.append(HeardEvent(
+                raw=raw, heard=" ".join(heard_w), conf=round(conf, 2),
+                dist_m=round(dist, 2), az_deg=round(az, 1),
+                itd_ms=round(itd, 2), ild=round(ild, 2),
+                loud=round(loud_now, 2), t_arrive=t_ready,
+                dur=round(dur, 2), masked=masked))
+            self.social_pulse = max(self.social_pulse, 0.9 * conf)
+        except Exception:
+            pass
 
     def mute_jaw_actuator(self, ctrl: np.ndarray) -> None:
         """While the jaw is driven kinematically its motor must not push against
@@ -462,6 +594,14 @@ class SkillSystem:
         self._step += 1
         self.social_pulse *= math.exp(-dt / 2.5)
         self.speech.update(dt)
+        # Utterances in flight arrive through the ears on physics time: drain
+        # the ones whose conduction delay has elapsed (delivery degrades).
+        if self._pending_voice:
+            t_now = self.agent.t
+            for p in list(self._pending_voice):
+                if t_now >= p["t_ready"]:
+                    self._pending_voice.remove(p)
+                    self._deliver_voice(**p)
         ag = self.agent
         # kinematic jaw
         if self.jaw_adr is not None and (self.speech.speaking or self.speech.jaw > 1e-3):
@@ -1788,13 +1928,10 @@ class SkillSystem:
             """Catch a loaded moment: succeeds if EITHER hand carries >40 N
             at any sample during a 1 s hold (loads come as rocking
             transients — single-side loads hit ~22% of ticks — not as
-            stillness). The walk then moves fast while the base holds."""
+            stillness). Yields every tick."""
             t2 = ag.t
             while ag.t - t2 < 1.0:
                 coord()
-                if sk.hands["l"].contact.get("support", 0.0) > 40.0 \
-                        or sk.hands["r"].contact.get("support", 0.0) > 40.0:
-                    return True
                 yield
             return False
 
@@ -1830,6 +1967,21 @@ class SkillSystem:
                 yield
             else:
                 raise ActionFailed(f"stand_up: hands never got under (COM {sk._rec_com():.2f} m)")
+            if sk._rec_walked:
+                # Bent-over stance reached and unrolled: straight to stand.
+                self.events.append("stand_up: walked up, standing")
+            if self._rec_lunged:
+                # Landed a lunge at the rock peak: front quad presses straight
+                # to standing (strongest motion available: 200 Nm knee).
+                F = "l" if self._recover_attempts % 2 == 0 else "r"
+                yield from self._rec_hold(
+                    {f"knee_{F}": 0.15, f"hip_{F}_flex": -0.05,
+                     "spine_bend": 0.05, "chest_bend": 0.0,
+                     "sh_l_flex": 0.20, "sh_r_flex": 0.20,
+                     "elbow_l": -0.40, "elbow_r": -0.40},
+                    6.0, lambda: self._rec_com() > 0.60, "lunge-press")
+                self._rec_pressed = True
+                self.events.append("stand_up: pressed up from lunge")
             # Unroll bottom-up with both hands still planted: hips first
             # (pelvis over feet), then spine in two halves. Knees stay
             # locked straight throughout — flexing them collapses the strut.
