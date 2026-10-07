@@ -55,10 +55,11 @@ class Rig:
     def kill_proxy(self):
         self.proxy.kill(); self.proxy.wait()
 
-    def ask(self, text="hello", **extra):
+    def ask(self, text="hello", headers=None, **extra):
         body = {"messages": [{"role": "user", "content": text}], **extra}
         req = urllib.request.Request(f"http://127.0.0.1:{self.pp}/v1/chat/completions",
-                                     data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+                                     data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json", **(headers or {})})
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 return r.status, json.loads(r.read())
@@ -154,6 +155,19 @@ def main() -> int:
     check("probe reaches all five models", pr.stdout.count(" ok ") == 5, pr.stdout[-300:])
     r.close()
 
+    print("I. a model gated to coding agents: skipped for the planner, usable by a real harness")
+    r = Rig(9929, 9939, mock_env={"MOCK_GATE_MODEL": models[0]})
+    code, out = r.ask("planner call")
+    check("ordinary caller falls through to the next model", code == 200 and out["x_helper"]["model"] == models[1],
+          str(out.get("x_helper")))
+    check("the gated model is recorded as gated, not dead", models[0] in r.usage()["gated"]
+          and models[0] not in r.usage()["skipped"], str(r.usage()))
+    code, out = r.ask("agent call", headers={"HTTP-Referer": "https://example-harness.test", "X-Title": "Real Harness"})
+    check("a caller that identifies itself as a harness gets the gated model", code == 200
+          and out["x_helper"]["model"] == models[0], str(out.get("x_helper")))
+    code, out = r.ask("planner again")
+    check("planner calls still avoid it", out["x_helper"]["model"] == models[1])
+    r.close()
     print("\n" + ("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}"))
     return 1 if FAILS else 0
 

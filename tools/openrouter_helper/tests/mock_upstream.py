@@ -46,6 +46,9 @@ class H(BaseHTTPRequestHandler):
         if body.get("model") == os.environ.get("MOCK_FAIL_MODEL"):
             self.send_response(404); self.send_header("Content-Type", "application/json"); self.end_headers()
             self.wfile.write(b'{"error":{"message":"no such model","code":404}}'); return
+        if body.get("model") == os.environ.get("MOCK_GATE_MODEL") and self.headers.get("X-Title") == "person-sim helper":
+            self.send_response(403); self.send_header("Content-Type", "application/json"); self.end_headers()
+            self.wfile.write(b'{"error":{"message":"x is only available on agentic harnesses. Try plugging it into a coding agent","code":403}}'); return
         if os.environ.get("MOCK_REJECT_BIG") and body.get("max_tokens", 0) > int(os.environ["MOCK_REJECT_BIG"]):
             self.send_response(400); self.send_header("Content-Type", "application/json"); self.end_headers()
             self.wfile.write(b'{"error":{"message":"max_tokens is too large for this model","code":400}}'); return
