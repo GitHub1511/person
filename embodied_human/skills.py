@@ -1838,27 +1838,28 @@ class SkillSystem:
                 self._rec_caught = True
                 self.events.append("stand_up: table climb worked, kneeling")
             elif self._rec_caught:
-                # Caught roll onto folded knees: rock forward into push-up, then stand
-                self.events.append("stand_up: rock-forward to push-up")
-                # Phase 1: Rock forward onto hands - shift COM forward, extend arms
+                # Caught roll onto folded knees: simple push-up to stand
+                # Arms take weight first, then knees extend
+                self.events.append("stand_up: push-up to stand")
+                # Phase 1: Arms take weight - straighten arms, lean forward
                 yield from self._rec_hold(
-                    {"knee_l": 1.20, "knee_r": 1.20,
-                     "hip_l_flex": -0.40, "hip_r_flex": -0.40,
+                    {"knee_l": 1.50, "knee_r": 1.50,
+                     "hip_l_flex": -0.80, "hip_r_flex": -0.80,
                      "ankle_l_flex": 0.20, "ankle_r_flex": 0.20,
-                     "spine_bend": 0.10, "chest_bend": 0.05,
-                     "sh_l_flex": -0.30, "sh_r_flex": -0.30,
+                     "spine_bend": 0.0, "chest_bend": 0.0,
+                     "sh_l_flex": -0.60, "sh_r_flex": -0.60,
                      "elbow_l": 0.0, "elbow_r": 0.0},
-                    4.0, lambda: self._rec_com() > 0.30, "rock-forward")
-                # Phase 2: Push-up position - arms straight, hips over hands
+                    3.0, lambda: self._rec_com() > 0.30, "arms-support")
+                # Phase 2: Extend knees - arms hold weight, body rises
                 yield from self._rec_hold(
                     {"knee_l": 1.00, "knee_r": 1.00,
-                     "hip_l_flex": -0.20, "hip_r_flex": -0.20,
-                     "ankle_l_flex": 0.0, "ankle_r_flex": 0.0,
+                     "hip_l_flex": -0.50, "hip_r_flex": -0.50,
+                     "ankle_l_flex": 0.10, "ankle_r_flex": 0.10,
                      "spine_bend": 0.0, "chest_bend": 0.0,
-                     "sh_l_flex": -0.40, "sh_r_flex": -0.40,
+                     "sh_l_flex": -0.30, "sh_r_flex": -0.30,
                      "elbow_l": 0.0, "elbow_r": 0.0},
-                    3.0, lambda: self._rec_com() > 0.35, "pushup-pos")
-                # Phase 3: Push-up to standing - extend legs, straighten arms
+                    5.0, lambda: self._rec_com() > 0.45, "extend-knees")
+                # Phase 3: Full extension to standing
                 yield from self._rec_hold(
                     {"knee_l": 0.10, "knee_r": 0.10,
                      "hip_l_flex": 0.0, "hip_r_flex": 0.0,
