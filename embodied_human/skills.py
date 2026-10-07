@@ -1585,6 +1585,7 @@ class SkillSystem:
         self.gesture_active = False
         self.recovery_active = True
         self._rec_caught = False
+        self._rec_walked = False
         try:
             # Curl into a ball first: always feasible (no ground leverage
             # needed), and a balled body rolls far easier than a sprawled one.
@@ -1628,23 +1629,27 @@ class SkillSystem:
                     self._rec_walked = True
                 finally:
                     self._rec_hold_table = False
-            yield from self._rec_hold(
-                # Rise to tall kneel: extend the hips (thighs vertical) while
-                # the knees stay planted and the torso comes upright — the
-                # glutes lift the torso pivoting on the knees.
-                {"knee_l": 1.70, "knee_r": 1.70,
-                 "hip_l_flex": -0.15, "hip_r_flex": -0.15,
-                 "ankle_l_flex": -0.20, "ankle_r_flex": -0.20,
-                 "spine_bend": 0.10, "chest_bend": 0.05,
-                 "sh_l_flex": 0.30, "sh_r_flex": 0.30,
-                 "elbow_l": -0.50, "elbow_r": -0.50},
-                6.0, lambda: self._rec_com() > 0.58, "kneel")
-            yield from self._rec_hold(
-                {"knee_l": 0.40, "hip_l_flex": -0.30, "ankle_l_flex": -0.15,
-                 "knee_r": 1.60, "hip_r_flex": -1.10, "ankle_r_flex": -0.55,
-                 "spine_bend": 0.08, "chest_bend": 0.05,
-                 "sh_l_flex": 0.50, "sh_r_flex": 0.50},
-                5.0, lambda: self._rec_com() > 0.68, "half-kneel")
+            if self._rec_walked:
+                # Bent-over stance reached and unrolled: straight to stand.
+                self.events.append("stand_up: walked up, standing")
+            else:
+                yield from self._rec_hold(
+                    # Rise to tall kneel: extend the hips (thighs vertical) while
+                    # the knees stay planted and the torso comes upright — the
+                    # glutes lift the torso pivoting on the knees.
+                    {"knee_l": 1.70, "knee_r": 1.70,
+                     "hip_l_flex": -0.15, "hip_r_flex": -0.15,
+                     "ankle_l_flex": -0.20, "ankle_r_flex": -0.20,
+                     "spine_bend": 0.10, "chest_bend": 0.05,
+                     "sh_l_flex": 0.30, "sh_r_flex": 0.30,
+                     "elbow_l": -0.50, "elbow_r": -0.50},
+                    6.0, lambda: self._rec_com() > 0.58, "kneel")
+                yield from self._rec_hold(
+                    {"knee_l": 0.40, "hip_l_flex": -0.30, "ankle_l_flex": -0.15,
+                     "knee_r": 1.60, "hip_r_flex": -1.10, "ankle_r_flex": -0.55,
+                     "spine_bend": 0.08, "chest_bend": 0.05,
+                     "sh_l_flex": 0.50, "sh_r_flex": 0.50},
+                    5.0, lambda: self._rec_com() > 0.68, "half-kneel")
             yield from self._rec_stand(nom)
             st = self.agent.state
             com_z = float(st.com[2]) if st is not None else 0.0
