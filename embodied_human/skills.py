@@ -2468,8 +2468,17 @@ class SkillSystem:
             yield
         if peak > 0.30 or abs(self._rec_chest_face_z()) > 0.35:
             self.events.append(
-                f"stand_up: rolling on (peak {peak:.2f} m), trying cobra")
-            # Fall back to cobra push-up from prone
+                f"stand_up: rolling on (peak {peak:.2f} m), planting hands for cobra")
+            # Plant hands first, then cobra push-up
+            yield from self._rec_hold(
+                {"elbow_l": -0.15, "elbow_r": -0.15,
+                 "sh_l_flex": 0.05, "sh_r_flex": 0.05,
+                 "hip_l_flex": -0.10, "hip_r_flex": -0.10,
+                 "knee_l": 0.20, "knee_r": 0.20,
+                 "spine_bend": 0.0, "chest_bend": 0.0},
+                3.0, lambda: self._rec_com() > 0.25, "hand-plant",
+                proceed=lambda: True)
+            # Cobra push-up from prone
             yield from self._rec_cobra()
             return
         raise ActionFailed("stand_up: could not roll prone "
