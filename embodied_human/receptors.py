@@ -97,6 +97,7 @@ EXTENDED_TACTILE_CHANNELS = (
     "irritant",             # TRPA1: chemical / drying irritation
     "ischemia",             # pressure-induced local ischaemia (the urge to shift)
 )
+N_BASE_TACTILE = len(TACTILE_CHANNELS)
 if COMPLEXITY.extended_tactile:
     TACTILE_CHANNELS = TACTILE_CHANNELS + EXTENDED_TACTILE_CHANNELS
 N_TACTILE_CH = len(TACTILE_CHANNELS)
@@ -488,6 +489,97 @@ class TactileSystem:
         return out, self._aggregate(out, contact_any)
 
     # ------------------------------------------------------------------
+    def _extended_channels(self, out, dt, normal, su, sv, shear_mag, force_rate,
+                           pressure_kpa, threshold_kpa, vib_broad, hair,
+                           noci_mech_drive, world_normal, state, blood_flow,
+                           cold_drive, band_sa) -> None:
+        """Tissue states and the receptor classes the 26-channel bank lacks."""
+        inner = self.inner
+        pidx = self.patch_idx
+        g = self.gains
+
+        # --- air movement on hairy skin: walking makes a wind -----------------
+        vel = np.asarray(getattr(state, "com_vel", np.zeros(3)), float)
+        speed = float(np.linalg.norm(vel[:2]))
+        wind = float(inner.get("airflow", 0.0)) + 0.9 * speed
+        if speed > 1e-3:
+            facing = np.clip(-(world_normal[:, :2] @ (vel[:2] / speed)), 0.0, 1.0)
+        else:
+            facing = np.full(self.n_taxels, 0.25)
+        hair_defl = g["hair"] * np.tanh(0.45 * wind * (0.3 + facing) + vib_broad * 0.08)
+        hair_defl = np.maximum(hair_defl, hair)
+
+        # --- skin stretch: leaky integral of shear (Ruffini) -------------------
+        a = dt / (dt + 2.0)
+        self.stretch_u += a * (0.5 * su * 4.0 - self.stretch_u)
+        self.stretch_v += a * (0.5 * sv * 4.0 - self.stretch_v)
+        stretch_e = np.hypot(self.stretch_u, self.stretch_v)
+
+        # --- edge / contrast: how much more loaded than its own patch ----------
+        edge = np.abs(normal - self._patch_mean(normal)[pidx])
+
+        # --- tickle: light, moving touch on hairy skin -------------------------
+        light = np.exp(-normal / 1.5)
+        tickle = hair_defl * light * np.tanh(np.abs(force_rate) * 0.05 + 0.2 * wind)
+
+        # --- moisture: sweat from the patch, evaporating with the air ----------
+        sweat = inner["sweat"][pidx]
+        humid = float(inner.get("humidity", 0.45))
+        evap = (1.0 - humid) * (1.0 + 0.8 * wind) / 90.0
+        self.wet += dt * (0.05 * sweat - evap * self.wet)
+        self.wet = np.clip(self.wet, 0.0, 1.0)
+        # evaporation cools the skin a little
+        self.temperature -= dt * 0.35 * evap * self.wet * 10.0
+
+        # --- local perfusion, piloerection ------------------------------------
+        bf = inner["blood_flow"][pidx] * blood_flow
+        arousal = float(inner.get("arousal", 0.25))
+        pilo_drive = np.clip(cold_drive * 1.6 + 0.35 * arousal, 0, 1) * g["hair"]
+        self.pilo += (dt / 12.0) * (pilo_drive - self.pilo)
+
+        # --- inflammation, sensitisation, itch --------------------------------
+        infl = np.clip(inner["inflammation"][pidx] + inner["damage"][pidx], 0.0, 1.5)
+        self.sens += dt * (0.03 * infl + 0.004 * np.tanh(self.adapt_noci * 2.0)
+                           - self.sens / 900.0)
+        self.sens = np.clip(self.sens, 0.0, 1.0)
+        prur = inner["pruritogen"][pidx]
+        self.pruri += (dt / 40.0) * (np.tanh(self.histamine * 3.0) + prur - self.pruri)
+
+        # --- receptor fatigue, pressure ischaemia ------------------------------
+        self.rfatigue += dt * (0.5 * np.tanh(self.adapt_sa1 + self.adapt_fa1)
+                               - self.rfatigue / 25.0)
+        self.rfatigue = np.clip(self.rfatigue, 0.0, 1.0)
+        ratio = pressure_kpa / np.maximum(threshold_kpa, 1.0)
+        self.ischemia += dt * (0.004 * np.maximum(ratio - 0.08, 0.0) / np.maximum(bf, 0.2)
+                               - self.ischemia / 300.0)
+        self.ischemia = np.clip(self.ischemia, 0.0, 1.0)
+
+        # --- nociceptor sub-classes -------------------------------------------
+        a_delta = np.tanh(2.0 * noci_mech_drive) * g["noci_mech"]
+        c_poly = np.tanh(1.2 * self.adapt_noci + 0.6 * infl + 0.5 * self.ischemia) \
+            * g["noci_mech"]
+        irritant = np.clip(inner["irritant"][pidx] + 0.3 * self.wet * (humid < 0.2), 0, 1.5)
+
+        base = N_BASE_TACTILE
+        out[:, base + 0] = hair_defl
+        out[:, base + 1] = self.stretch_u
+        out[:, base + 2] = self.stretch_v
+        out[:, base + 3] = stretch_e
+        out[:, base + 4] = edge
+        out[:, base + 5] = tickle
+        out[:, base + 6] = self.wet
+        out[:, base + 7] = bf
+        out[:, base + 8] = self.pilo
+        out[:, base + 9] = self.sens
+        out[:, base + 10] = infl
+        out[:, base + 11] = self.pruri
+        out[:, base + 12] = self.rfatigue
+        out[:, base + 13] = a_delta
+        out[:, base + 14] = c_poly
+        out[:, base + 15] = irritant
+        out[:, base + 16] = self.ischemia
+
+    # ------------------------------------------------------------------
     def _aggregate(self, out: np.ndarray, mask: np.ndarray) -> dict:
         """Per-region summaries plus a whole-body summary vector.
 
@@ -535,7 +627,9 @@ class TactileSystem:
         self.prev_normal[:] = 0.0
         self.vib_state[:] = 0.0
         for nm in ("adapt_sa1", "adapt_sa2", "adapt_fa1", "adapt_fa2",
-                   "adapt_ct", "adapt_noci", "itch_state", "histamine"):
+                   "adapt_ct", "adapt_noci", "itch_state", "histamine",
+                   "stretch_u", "stretch_v", "wet", "pilo", "sens", "rfatigue",
+                   "ischemia", "pruri"):
             getattr(self, nm)[:] = 0.0
 
 

@@ -53,7 +53,7 @@ class RateConfig:
     """Update rates of the nested control loops (Hz)."""
 
     physics: float = 1000.0
-    receptor: float = 250.0
+    receptor: float = COMPLEXITY.tactile_hz   # dense skin is transduced more slowly
     afferent: float = 200.0
     interoception: float = 100.0
     affect: float = 50.0
