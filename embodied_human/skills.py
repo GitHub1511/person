@@ -1785,20 +1785,24 @@ class SkillSystem:
         def press_anchor(side: str) -> bool:
             """Press the planted hand down and verify it CARRIES LOAD at the
             end of the hold (support force > 25 N sustained — impact spikes
-            don't count) without drifting. Presses deeper (up to 3 tries)."""
-            for depth in (0.005, -0.010, -0.020):
-                cur = sk._rec_hand_home(side)
+            don't count) without drifting. Descends in 5 mm increments with
+            dwells so touchdown is gentle (a fast slam just bounces off).
+            Up to 4 increments before giving up on it."""
+            cur = sk._rec_hand_home(side)
+            for k in range(4):
                 tgt = cur.copy()
-                tgt[2] = depth
+                tgt[2] = max(cur[2] - 0.005 * (k + 1), -0.015)
                 sk._rec_servo_hand(side, tgt)
                 t2 = ag.t
-                while ag.t - t2 < 0.7:
+                while ag.t - t2 < 0.6:
                     coord()
                     yield
                 now = sk._rec_hand_home(side)
                 sustained = sk.hands[side].contact.get("support", 0.0) > 25.0
-                if sustained and float(np.linalg.norm(now - cur)) < 0.05:
+                drifted = float(np.linalg.norm(now - cur)) > 0.05
+                if sustained and not drifted:
                     return True
+                cur = now
             return False
 
         try:
