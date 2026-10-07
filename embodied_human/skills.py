@@ -1786,19 +1786,6 @@ class SkillSystem:
         raise ActionFailed(f"stand_up: {stage} made no progress "
                            f"(COM {self._rec_com():.2f} m)")
 
-    def _rec_roll(self):
-        """Roll until prone (chest-back faces up) or the COM lifts.
-
-        Side-lying is a stable equilibrium far stronger than the spine-twist
-        motors, so the roll uses the heavy levers: one leg swings over the
-        body while the opposite arm reaches overhead, and the twist follows.
-        Two mirror poses alternate every ~2.5 s; whichever raises the chest
-        is kept (hill-climbing on the live orientation).
-        """
-        ag = self.agent
-        if self._rec_chest_face_z() < -0.50 or self._rec_com() > 0.35:
-            return
-
     def _rec_roll_pose(self, sign, pump=1.0):
         p = {"spine_twist": sign * 0.45, "chest_twist": sign * 0.40,
              "spine_side": sign * 0.20, "spine_bend": 0.30,
@@ -1872,6 +1859,9 @@ class SkillSystem:
         """
         ag = self.agent
         if self._rec_chest_face_z() < -0.50 or self._rec_com() > 0.35:
+            return
+        if self._rec_chest_face_z() > 0.50:
+            self.events.append("stand_up: already supine")
             return
 
         sign = 1.0 if self._recover_attempts % 2 == 1 else -1.0
