@@ -1,0 +1,5 @@
+=== INSTANCE P-20261007-ed67624b ===
+started_utc: 2026-10-07T17:47:59Z
+seed: 7
+backend: SCRIPTED STAND-IN (no language model loaded)
+---

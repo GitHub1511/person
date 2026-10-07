@@ -1673,6 +1673,7 @@ class SkillSystem:
             self.recovery_active = False
             self.recovery_targets = {}
             self._rec_hold_table = False
+            self._rec_climbing = False
             for s in "lr":
                 try:
                     self.arm[s].stop()
