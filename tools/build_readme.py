@@ -156,7 +156,15 @@ def getup_status() -> str:
     return f.read_text(encoding="utf-8").strip() if f.exists() else         "No success rate is claimed: the recovery diagnostic had not been run to completion when this was written."
 
 
-GEN = {"POLICIES": policies, "GETUP_STATUS": getup_status, "CODEMAP": codemap, "PATCHES": patches, "BEHAVIOR_CHANNELS": behavior_channels,
+def modstats() -> str:
+    tl = tc = tf = n = 0
+    for p in (ROOT / "embodied_human").glob("*.py"):
+        _, ln, c, f = first_doc_line(p)
+        tl += ln; tc += c; tf += f; n += 1
+    return f"{n} files, {tl:,} lines, {tc} classes, {tf} functions"
+
+
+GEN = {"MODSTATS": modstats, "POLICIES": policies, "GETUP_STATUS": getup_status, "CODEMAP": codemap, "PATCHES": patches, "BEHAVIOR_CHANNELS": behavior_channels,
        "COMPLEXITY_TABLE": complexity_table, "TOOLS": tools_list, "DIAGS": diag_list}
 
 

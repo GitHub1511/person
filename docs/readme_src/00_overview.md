@@ -17,7 +17,7 @@ or a count of what is *describable* rather than what has been *demonstrated*, th
 
 | quantity | value | where measured |
 |---|---|---|
-| Python modules in `embodied_human/` | 39 files, 18,790 lines, 124 classes, 676 functions | static analysis, Appendix A |
+| Python modules in `embodied_human/` | {{MODSTATS}} | static analysis (`ast`), §12 |
 | Complexity levels | 6 (`base`, `rich`, `extreme`, `max`, `ultra`, `mega`) | `complexity.py` |
 | Actuated degrees of freedom | 52 (qpos 94, qvel 88) | MuJoCo model |
 | Bodies / joints / geoms | 44 / 58 / 68 (58 colliding, 10 visual only) | MuJoCo model, §2 |
