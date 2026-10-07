@@ -692,6 +692,32 @@ class Mind:
         self._wake.set()
 
     # ------------------------------------------------------------------
+    # Instance transcript: every thought, action, heard and spoken line
+    # lands in the instance's own .txt file (see instance_log.py).
+    # ------------------------------------------------------------------
+    def interview_ask(self, question: str, *, model: str = "",
+                      rationale: str = "") -> None:
+        """Pose one interview question: recorded, heard, and thought about."""
+        q = " ".join(str(question or "").split())[:300]
+        if not q:
+            return
+        self.instance_log.interview(q, model=model, rationale=rationale,
+                                    sim_t=self.agent.t)
+        self.agent.skills.hear(q)
+        self.poke()
+
+    def _drain_said(self) -> None:
+        """Log newly spoken utterances since the last think cycle."""
+        try:
+            hist = self.agent.skills.speech.history
+        except Exception:
+            return
+        new = hist[self._said_seen:]
+        self._said_seen = len(hist)
+        for _, text in new:
+            self.instance_log.said(text, sim_t=self.agent.t)
+
+    # ------------------------------------------------------------------
     def _loop(self) -> None:
         ag = self.agent
         sk = ag.skills
@@ -763,6 +789,18 @@ class Mind:
                                 "errors": reply.errors, "latency": time.time() - t0,
                                 "heard": heard, "events": events, "raw": raw})
         self.log(f"[mind] {reply.think}")
+        # ---- instance transcript file ----
+        for h in heard:
+            self.instance_log.heard(h, sim_t=ag.t)
+        if events:
+            self.instance_log.event("; ".join(events)[:600], sim_t=ag.t)
+        self.instance_log.thought(reply.think, sim_t=ag.t)
+        calls_txt = "; ".join(self._fmt(n, a, k) for n, a, k in reply.calls)
+        extra = f"latency {time.time() - t0:.1f}s"
+        if reply.errors:
+            extra += "; problems: " + "; ".join(reply.errors)[:300]
+        self.instance_log.action(calls_txt, sim_t=ag.t, extra=extra)
+        self._drain_said()
 
     @staticmethod
     def _fmt(name, args, kwargs) -> str:
