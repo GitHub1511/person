@@ -1797,6 +1797,10 @@ class SkillSystem:
                                        - sk._rec_foot_home(s))) < 0.30:
                     sk.events.append("stand_up: hands at feet, unrolling")
                     break
+                other = step_side
+                if sk.hands[other].contact.get("support", 0.0) < 15.0:
+                    # base hand unloaded: re-establish it before moving
+                    yield from press_anchor(other)
                 cur = sk._rec_hand_home(s)
                 over = cur.copy()
                 over[2] = cur[2] + 0.10
