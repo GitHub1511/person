@@ -1838,17 +1838,18 @@ class SkillSystem:
                 self._rec_caught = True
                 self.events.append("stand_up: table climb worked, kneeling")
             elif self._rec_caught:
-                # Cobra succeeded: we're in an arched/extended pose. Extend knees
-                # to get feet under hips, then unroll to standing.
-                self.events.append("stand_up: cobra to stand")
+                # Caught roll onto folded knees: stand up from kneeling
+                self.events.append("stand_up: kneel to stand")
+                # Phase 1: Extend hips and knees to get feet under hips
                 yield from self._rec_hold(
-                    {"knee_l": 0.10, "knee_r": 0.10,
-                     "hip_l_flex": -0.05, "hip_r_flex": -0.05,
-                     "ankle_l_flex": -0.05, "ankle_r_flex": -0.05,
-                     "spine_bend": -0.20, "chest_bend": -0.10,
-                     "sh_l_flex": 0.15, "sh_r_flex": 0.15,
-                     "elbow_l": -0.10, "elbow_r": -0.10},
-                    4.0, lambda: self._rec_com() > 0.55, "cobra-stand-prep")
+                    {"knee_l": 0.20, "knee_r": 0.20,
+                     "hip_l_flex": -0.10, "hip_r_flex": -0.10,
+                     "ankle_l_flex": -0.10, "ankle_r_flex": -0.10,
+                     "spine_bend": 0.10, "chest_bend": 0.05,
+                     "sh_l_flex": 0.20, "sh_r_flex": 0.20,
+                     "elbow_l": -0.30, "elbow_r": -0.30},
+                    5.0, lambda: self._rec_com() > 0.45, "kneel-rise")
+                # Phase 2: Extend fully to standing
                 yield from self._rec_hold(
                     {"knee_l": 0.10, "knee_r": 0.10,
                      "hip_l_flex": 0.0, "hip_r_flex": 0.0,
@@ -1856,7 +1857,7 @@ class SkillSystem:
                      "spine_bend": 0.02, "chest_bend": 0.0,
                      "sh_l_flex": 0.10, "sh_r_flex": 0.10,
                      "elbow_l": -0.10, "elbow_r": -0.10},
-                    6.0, lambda: self._rec_com() > 0.72, "cobra-stand")
+                    6.0, lambda: self._rec_com() > 0.72, "kneel-stand")
             elif self._rec_pressed:
                 # Already handled by lunge press above
                 pass
