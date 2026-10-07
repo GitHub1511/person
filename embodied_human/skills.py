@@ -1750,6 +1750,7 @@ class SkillSystem:
                       f"sh_{top}_flex": 2.20, f"elbow_{top}": -0.20,
                       f"sh_{bot}_flex": 0.80, f"elbow_{bot}": -0.90})
             return p
+        self._rec_roll_pose = pose
 
         sign = 1.0 if self._recover_attempts % 2 == 1 else -1.0
         t0 = ag.t
