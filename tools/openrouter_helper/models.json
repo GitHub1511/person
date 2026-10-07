@@ -1,0 +1,13 @@
+{
+  "_comment": "Models are used strictly in this order, 200 requests each per UTC day (5 x 200 = the 1000/day account limit). max_tokens_try is a ladder: the first value that the provider accepts is remembered. target_tokens is what the prompts ask the coder to aim for (there is no way to force it).",
+  "requests_per_model_per_day": 200,
+  "requests_per_minute": 20,
+  "requests_per_day": 1000,
+  "models": [
+    {"id": "thinkingmachines/inkling-small:free", "max_tokens_try": [250000, 100000, 50000], "target_tokens": 200000, "cap_note": "250k output"},
+    {"id": "nvidia/nemotron-3-super-120b-a12b:free", "max_tokens_try": [250000, 100000, 50000], "target_tokens": 200000, "cap_note": "250k output"},
+    {"id": "poolside/laguna-s-2.1:free", "max_tokens_try": [32000], "target_tokens": 30000, "cap_note": "32k output"},
+    {"id": "nvidia/nemotron-3-ultra-550b-a55b:free", "max_tokens_try": [64000, 50000], "target_tokens": 50000, "cap_note": "64k output"},
+    {"id": "inclusionai/ling-3.1-flash:free", "max_tokens_try": [32000], "target_tokens": 30000, "cap_note": "32k output"}
+  ]
+}
