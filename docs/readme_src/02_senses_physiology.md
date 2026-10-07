@@ -17,7 +17,7 @@ of the complexity level (§17.1):
 
 The 46 patches range from 8 taxels (`base`) to 112 (the thigh), so a patch holds 0.4 % to 5.6 % of the
 skin. Distinct patches form C(46,2) = **1,035** unordered pairs; distinct taxels form C(1992,2) =
-**1,983,036** pairs at `base` and 160,709,... pairs at `extreme`, which is why contact is attributed to
+**1,983,036** pairs at `base` and 160,697,628 pairs at `extreme`, which is why contact is attributed to
 taxels by a local receptive field and never by pairwise search. The full patch table is Appendix A.2.
 
 The 43 channels are the 26 original ones (below) plus 17 extended ones that exist at `rich` and above

@@ -188,8 +188,8 @@ Each control step proceeds: **feel → interpret → want → predict → choose
 | mean drives | comfort 0.464, thermal_cold 0.462, hunger 0.443, curiosity 0.348, sleepiness 0.147, itch 0.091 |
 | speed | 57.9 s wall for 20.0 s simulated = 0.35× real time |
 
-The forward model's prediction error falls steeply within the first seconds; the agent starts from the prior
-"nothing changes unless I act" and learns the sensory consequences of its own commands within about ten
-cognitive ticks (1 s).
+In the original reference run (an earlier version of the project, not re-measured here) the forward model's
+prediction error fell steeply within the first second: the agent starts from the prior "nothing changes unless
+it acts" and learned the sensory consequences of its own commands within about ten cognitive ticks.
 
 ---
