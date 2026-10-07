@@ -849,6 +849,11 @@ class VisualSystem:
         self._cached = np.zeros(len(VISUAL_CHANNELS))
         self._last_img = None
         self._since_render = 1e9
+        self.retina = RetinaBank(self.V.retina_h, self.V.retina_w)
+        self.last_retina = None
+        # set from outside by the agent: the state of the eyes (see ocular.py).
+        # None -> the original random blink generator.
+        self.eye_state: dict | None = None
         if self.enabled:
             try:
                 self.renderer = mujoco_renderer(meta.model, self.V.retina_h,
@@ -869,15 +874,21 @@ class VisualSystem:
         self.pupil += (dt / 0.6) * (target - self.pupil)
 
         # ---- blink -------------------------------------------------------
-        self.blink_t -= dt
-        blink = 0.0
-        if self.blink_t > 0:
-            blink = 1.0
+        blur = 0.0
+        if self.eye_state is not None:
+            # the ocular surface decides: lid aperture and tear-film blur
+            blink = float(1.0 - self.eye_state["aperture"])
+            blur = float(self.eye_state["blur"])
         else:
-            self.next_blink -= dt
-            if self.next_blink <= 0:
-                self.blink_t = V.blink_duration
-                self.next_blink = float(self.rng.uniform(*V.blink_interval))
+            self.blink_t -= dt
+            blink = 0.0
+            if self.blink_t > 0:
+                blink = 1.0
+            else:
+                self.next_blink -= dt
+                if self.next_blink <= 0:
+                    self.blink_t = V.blink_duration
+                    self.next_blink = float(self.rng.uniform(*V.blink_interval))
 
         # ---- saccades ----------------------------------------------------
         self.saccade_t -= dt
@@ -906,9 +917,19 @@ class VisualSystem:
             self._last_img = img
         else:
             img = self._last_img
-        gray = img.mean(axis=2)
+        eff = img
+        if blur > 0.02:
+            # an irregular tear film scatters light: mix in a defocused copy
+            bl = (np.pad(img, ((1, 1), (1, 1), (0, 0)), mode="edge"))
+            soft = (bl[:-2, :-2] + bl[:-2, 1:-1] + bl[:-2, 2:] + bl[1:-1, :-2]
+                    + bl[1:-1, 1:-1] + bl[1:-1, 2:] + bl[2:, :-2] + bl[2:, 1:-1]
+                    + bl[2:, 2:]) / 9.0
+            m = 0.85 * min(blur, 1.0)
+            eff = (1.0 - m) * img + m * soft
         if blink > 0:
-            gray = gray * 0.05
+            eff = eff * (1.0 - 0.95 * min(blink, 1.0))
+        gray = eff.mean(axis=2)
+        self.last_retina = self.retina.sense(eff, pupil_mm=self.pupil)
 
         h, w = gray.shape
         if self.prev_gray is None or self.prev_gray.shape != gray.shape:
@@ -926,7 +947,7 @@ class VisualSystem:
         per_mask[cy - fh // 2:cy + fh // 2, cx - fw // 2:cx + fw // 2] = False
 
         gx = np.abs(np.diff(gray, axis=1)).mean() if w > 1 else 0.0
-        color = img.reshape(-1, 3).mean(axis=0)
+        color = eff.reshape(-1, 3).mean(axis=0)
 
         out = np.zeros(len(VISUAL_CHANNELS))
         out[0] = float(gray.mean())

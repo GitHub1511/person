@@ -136,8 +136,8 @@ class VestibularConfig:
 @dataclass
 class VisionConfig:
     enabled: bool = True
-    retina_w: int = 48
-    retina_h: int = 36
+    retina_w: int = COMPLEXITY.retina_w
+    retina_h: int = COMPLEXITY.retina_h
     fovea_frac: float = 0.30      # central fraction rendered at full detail
     update_hz: float = 60.0
     saccade_interval: tuple[float, float] = (0.15, 0.55)
@@ -151,7 +151,7 @@ class VisionConfig:
 
 @dataclass
 class AudioConfig:
-    n_bands: int = 24
+    n_bands: int = 24                 # the base bank; the cochlea (senses_ext) is denser
     f_min: float = 20.0
     f_max: float = 16000.0
     tau_onset: float = 0.010
