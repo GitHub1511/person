@@ -1679,43 +1679,42 @@ class SkillSystem:
         if self._rec_chest_up_z() > 0.55 or self._rec_com() > 0.35:
             return
 
-        def pose(sign):
+        def pose(sign, pump=1.0):
             p = {"spine_twist": sign * 0.45, "chest_twist": sign * 0.40,
-                 "spine_side": sign * 0.20}
+                 "spine_side": sign * 0.20, "spine_bend": 0.30,
+                 "chest_bend": 0.15}
             top = "l" if sign > 0 else "r"
             bot = "r" if sign > 0 else "l"
-            p.update({f"hip_{top}_flex": -1.40, f"knee_{top}": 1.80,
+            swing = 0.55 + 0.45 * pump
+            p.update({f"hip_{top}_flex": -1.40 * swing, f"knee_{top}": 1.80 * swing,
                       f"hip_{top}_abd": 0.25,
-                      f"hip_{bot}_flex": -0.10, f"knee_{bot}": 0.15,
+                      f"hip_{bot}_flex": -0.80, f"knee_{bot}": 1.20,
                       f"sh_{top}_flex": 2.20, f"elbow_{top}": -0.20,
-                      f"sh_{bot}_flex": -0.50, f"elbow_{bot}": -0.60})
+                      f"sh_{bot}_flex": 0.80, f"elbow_{bot}": -0.90})
             return p
 
         sign = 1.0 if self._recover_attempts % 2 == 1 else -1.0
         t0 = ag.t
         last_flip = ag.t
         best = self._rec_chest_up_z()
-        cur = pose(sign)
-        full = dict(self.q_nom_map)
-        full.update(cur)
-        self._rec_set({nm: tv for nm, tv in full.items()
-                       if nm in ag.meta.qpos_addr})
-        while ag.t - t0 < 12.0:
+        while ag.t - t0 < 16.0:
             if self._rec_chest_up_z() > 0.55 or self._rec_com() > 0.35:
                 self.events.append("stand_up: rolled prone")
                 return
-            if ag.t - last_flip > 2.5:
+            # pump the swing at ~0.8 Hz to rock over the hump; static holds
+            # alone rock up part-way and fall back
+            pump = 0.55 + 0.45 * float(np.sin(2 * np.pi * 0.8 * (ag.t - t0)))
+            if ag.t - last_flip > 3.0:
                 if self._rec_chest_up_z() > best + 0.05:
                     best = self._rec_chest_up_z()
                 else:
                     sign = -sign  # wrong side: mirror the whole pose
                     best = self._rec_chest_up_z()
-                    cur = pose(sign)
-                    full = dict(self.q_nom_map)
-                    full.update(cur)
-                    self._rec_set({nm: tv for nm, tv in full.items()
-                                   if nm in ag.meta.qpos_addr})
                 last_flip = ag.t
+            full = dict(self.q_nom_map)
+            full.update(pose(sign, pump))
+            self._rec_set({nm: tv for nm, tv in full.items()
+                           if nm in ag.meta.qpos_addr})
             yield
         raise ActionFailed("stand_up: could not roll prone "
                            f"(chest_up {self._rec_chest_up_z():+.2f})")
