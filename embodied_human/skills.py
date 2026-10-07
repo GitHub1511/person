@@ -400,6 +400,10 @@ class SkillSystem:
         self.gaze_cur = np.zeros(4)           # neck yaw, neck pitch, eye yaw, eye pitch
         self.gesture_targets: dict[str, float] = {}
         self.gesture_active = False
+        self.recovery_targets: dict[str, float] = {}
+        self.recovery_active = False
+        self._auto_recover_t = -1e9
+        self._recover_attempts = 0
         self.crouch = 0.0
         self.crouch_target = 0.0
         self.stand_height0 = None
