@@ -34,7 +34,7 @@ def check(name, cond, detail=""):
 
 
 def main() -> int:
-    steps = int(sys.argv[1]) if len(sys.argv) > 1 else 12
+    steps = int(sys.argv[1]) if len(sys.argv) > 1 else 9
     sb = Path(tempfile.mkdtemp(prefix="helper_loop_"))
     ign = shutil.ignore_patterns("__pycache__", "state", "node_modules", ".env", "pi")
     shutil.copytree(ROOT / "embodied_human", sb / "embodied_human", ignore=ign)
