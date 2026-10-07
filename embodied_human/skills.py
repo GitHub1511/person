@@ -2394,18 +2394,19 @@ class SkillSystem:
             peak = max(peak, com)
             vel = (com - prev) / max(TICK, 1e-6)
             prev = com
-            if face < -0.50 or com > 0.35:
-                if lunged:
-                    # A lunge was thrown: landing prone with the front leg
-                    # posted still counts as a catch — continue holding the
-                    # lunge pose so the front quad can press.
-                    self._rec_lunged = True
-                    self.events.append("stand_up: lunge posted prone")
-                    return
+            if face < -0.50:
+                # Fully prone: try cobra push-up
                 self.events.append("stand_up: rolled prone, trying cobra")
-                # Transition directly to cobra push-up from prone
                 yield from self._rec_cobra()
                 return
+            if com > 0.35:
+                # High COM but not prone: check for catch, continue rolling
+                if tucked and com > 0.34:
+                    # caught a big rock onto the folded knees: skip ahead
+                    self._rec_caught = True
+                    self.events.append("stand_up: caught roll onto knees")
+                    return
+                # Continue rolling - don't return early
             if tucked and com > 0.34:
                 # caught a big rock onto the folded knees: skip ahead
                 self._rec_caught = True
