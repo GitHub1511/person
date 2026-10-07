@@ -425,7 +425,7 @@ def verify() -> int:
                 problems.append(f"import fails at {lvl}: {(r.stderr.strip().splitlines() or ['?'])[-1]}")
     smoke = {}
     if not problems:
-        r = sh([PY, str(HERE / "smoke.py"), "base", "20"], timeout=400, env={"PERSON_COMPLEXITY": "base"})
+        r = sh([PY, str(HERE / "smoke.py"), "base", os.environ.get("HELPER_SMOKE_SECS", "20")], timeout=400, env={"PERSON_COMPLEXITY": "base"})
         line = [l for l in r.stdout.splitlines() if l.startswith("@@")]
         if r.returncode or not line:
             problems.append("smoke run failed: " + ((r.stderr.strip().splitlines() or r.stdout.strip().splitlines() or ["?"])[-1]))
