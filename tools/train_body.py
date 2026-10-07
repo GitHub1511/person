@@ -2,8 +2,8 @@
 """
 Learn, from many bodies at once, which behaviours are safe to perform.
 
-    python tools/train_body.py                         # use most cores
-    python tools/train_body.py --workers 10 --sim 240 --rounds 2
+    python tools/train_body.py                         # use several cores
+    python tools/train_body.py --workers 6 --sim 240 --rounds 3
     python tools/train_body.py --eval-only             # just compare, do not refit
 
 What it does
@@ -26,13 +26,16 @@ What it does
 The model is written to ``embodied_human/body_safety.json`` and is loaded by every
 new person; each person then keeps adapting it online from its own outcomes.
 
+Each copy of the person needs ~1-1.5 GB, so ``--workers`` is capped by the free memory.
 Training runs at ``base`` sensory complexity (the balance physics does not depend on
-how many receptors there are, and it is several times faster).
+how many receptors there are, and it is several times faster).  A job that fails
+(out of memory, say) is reported and skipped; it does not stop the others.
 """
 
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import multiprocessing as mp
 import os
@@ -57,24 +60,27 @@ def build_agent(seed: int):
     from embodied_human.agent import EmbodiedHuman
     from embodied_human.config import SimConfig
     cfg = SimConfig(seed=seed, out_dir=Path(tempfile.gettempdir()) / f"train_body_{os.getpid()}")
-    ag = EmbodiedHuman(cfg, vision=False, touch_sensors=False)
-    return ag
+    return EmbodiedHuman(cfg, vision=False, touch_sensors=False)
 
 
 def babble(job: dict) -> dict:
-    """One copy of the person: run behaviours, report outcomes."""
+    """One copy of the person: run behaviours, report outcomes.  Never raises."""
     seed, budget = job["seed"], job["sim"]
     mode = job["mode"]                      # 'auto' | 'ambient'
-    mode_safe = job["safe"]                 # use the learned model while choosing
-    ag = build_agent(seed)
+    use_model = job["safe"]                 # use the learned model while choosing
     rng = np.random.default_rng(seed)
+    records: list[tuple] = []
+    state = {"falls": 0, "sim": 0.0, "decisions": 0}
+    distinct: set = set()
+    t_wall = time.perf_counter()
+    err = None
 
     def configure(ag):
         ag.autonomous = (mode == "auto")
         ex = ag.behavior
         ex.learn_online = False
         ex.max_hold = 3.0 if job.get("short", True) else None
-        if mode_safe:
+        if use_model:
             ex.safety.load(MODEL_PATH)
             ex.safety_weight = 5.0
             ex.explore_boost = 1.0
@@ -88,52 +94,41 @@ def babble(job: dict) -> dict:
             ex.safety_weight = float(job["model_weight"])
         return ex
 
-    ex = configure(ag)
-    records: list[tuple] = []
-    err = None
-    total = 0.0
-    falls = 0
-    distinct = set()
-    n_dec = 0
-    chan_counts: list[dict] = []
-    seen = 0
-    t_wall = time.perf_counter()\n    try:\n      while total < budget:
-        ag.step()
-        # harvest finished behaviours
-        if len(ex.outcomes) > seen:
-            for o in ex.outcomes[seen:]:
-                records.append((o[0].tolist(), int(o[1]), float(o[2]), float(o[3]), int(o[4])))
-                distinct.add(o[0].tobytes())
-                n_dec += 1
-            seen = len(ex.outcomes)
-        if ag.state.fallen:
-            falls += 1
-            ex.run_fell = True
-            ex._close_outcome(ag.t)
+    def harvest(ex, seen):
+        for o in ex.outcomes[seen:]:
+            records.append((o[0].tolist(), int(o[1]), float(o[2]), float(o[3]), int(o[4])))
+            distinct.add(o[0].tobytes())
+            state["decisions"] += 1
+        return len(ex.outcomes)
+
+    try:
+        ag = build_agent(seed)
+        ex = configure(ag)
+        seen = 0
+        while state["sim"] + ag.t < budget:
+            ag.step()
             if len(ex.outcomes) > seen:
-                for o in ex.outcomes[seen:]:
-                    records.append((o[0].tolist(), 1, float(o[2]), float(o[3]), 1))
-                    distinct.add(o[0].tobytes())
-                    n_dec += 1
-                seen = len(ex.outcomes)
-            # a slow loss of balance is often the *previous* behaviour's doing
-            if len(records) >= 2 and records[-2][3] < 6.0:
-                r = records[-2]
-                records[-2] = (r[0], 1, r[2], r[3], r[4])
-            total += ag.t
-            del ex
-            del ag
-            import gc
-            gc.collect()                      # a MuJoCo model + data per body: do not pile them up
-            ag = build_agent(int(rng.integers(0, 2 ** 31)))
-            ex = configure(ag)
-            seen = 0
-        if ag.t + total >= budget:
-            break
-    total += ag.t if not ag.state.fallen else 0.0
-    return {"records": records, "falls": falls, "sim": float(total), "decisions": n_dec,
-            "distinct": len(distinct), "wall": time.perf_counter() - t_wall,
-            "mode": mode, "safe": mode_safe}
+                seen = harvest(ex, seen)
+            if ag.state.fallen:
+                state["falls"] += 1
+                ex.run_fell = True
+                ex._close_outcome(ag.t)
+                seen = harvest(ex, seen)
+                if len(records) >= 2 and records[-2][3] < 6.0:
+                    r = records[-2]
+                    records[-2] = (r[0], 1, r[2], r[3], r[4])   # the previous one set it up
+                state["sim"] += ag.t
+                del ex, ag
+                gc.collect()                  # a MuJoCo model + data per body
+                ag = build_agent(int(rng.integers(0, 2 ** 31)))
+                ex = configure(ag)
+                seen = 0
+        state["sim"] += ag.t
+    except BaseException as exc:             # MemoryError and friends: keep what we have
+        err = f"{type(exc).__name__}: {exc}"
+    return {"records": records, "falls": state["falls"], "sim": float(state["sim"]),
+            "decisions": state["decisions"], "distinct": len(distinct),
+            "wall": time.perf_counter() - t_wall, "mode": mode, "safe": use_model, "error": err}
 
 
 def make_space():
@@ -161,8 +156,14 @@ def auc(scores: np.ndarray, y: np.ndarray) -> float:
 
 
 def run_pool(jobs: list[dict], workers: int) -> list[dict]:
+    out = []
     with mp.Pool(workers, maxtasksperchild=1) as pool:
-        return pool.map(babble, jobs, chunksize=1)
+        for r in pool.imap_unordered(babble, jobs, chunksize=1):
+            if r["error"]:
+                print(f"    (a job stopped early: {r['error'][:90]} - kept {len(r['records'])} behaviours)",
+                      flush=True)
+            out.append(r)
+    return out
 
 
 def pooled(results: list[dict]) -> list[tuple]:
@@ -188,7 +189,7 @@ def fit(space, recs: list[tuple]) -> dict:
     p = 1 / (1 + np.exp(-sc))
     ll = float(-np.mean(y[te] * np.log(p + 1e-9) + (1 - y[te]) * np.log(1 - p + 1e-9)))
     ll0 = float(-np.mean(y[te] * np.log(base + 1e-9) + (1 - y[te]) * np.log(1 - base + 1e-9)))
-    info = ms.fit(X, y)          # final model on all data
+    ms.fit(X, y)                  # final model on all data
     ms.save(MODEL_PATH)
     return {"n": len(y), "unsafe_rate": float(y.mean()), "heldout_auc": a,
             "heldout_logloss": ll, "constant_logloss": ll0, "top_risks": ms.top_risks(14)}
@@ -198,70 +199,101 @@ def summarize(label: str, results: list[dict]) -> dict:
     sim = sum(r["sim"] for r in results)
     falls = sum(r["falls"] for r in results)
     recs = pooled(results)
-    unsafe = np.mean([r[1] for r in recs]) if recs else float("nan")
-    dec = sum(r["decisions"] for r in results)
+    unsafe = float(np.mean([r[1] for r in recs])) if recs else float("nan")
     dist = len(set(tuple(r[0]) for r in recs))
     s = {"label": label, "sim_seconds": sim, "behaviours": len(recs), "unsafe_per_100": 100 * unsafe,
          "falls": falls, "falls_per_sim_hour": falls / max(sim / 3600.0, 1e-9),
          "distinct": dist, "distinct_frac": dist / max(len(recs), 1)}
     print(f"  {label:34s} {len(recs):5d} behaviours | unsafe {100 * unsafe:5.1f}/100 | "
           f"falls {falls:3d} in {sim / 60:5.1f} sim-min ({s['falls_per_sim_hour']:.0f}/h) | "
-          f"distinct {dist} ({100 * s['distinct_frac']:.0f}%)")
+          f"distinct {dist} ({100 * s['distinct_frac']:.0f}%)", flush=True)
     return s
+
+
+def free_memory_gb() -> float:
+    try:
+        import ctypes
+
+        class MS(ctypes.Structure):
+            _fields_ = [("l", ctypes.c_ulong), ("load", ctypes.c_ulong), ("tp", ctypes.c_ulonglong),
+                        ("ap", ctypes.c_ulonglong), ("tpf", ctypes.c_ulonglong),
+                        ("apf", ctypes.c_ulonglong), ("tv", ctypes.c_ulonglong),
+                        ("av", ctypes.c_ulonglong), ("ext", ctypes.c_ulonglong)]
+        m = MS()
+        m.l = ctypes.sizeof(MS)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
+        return min(m.ap, m.apf) / 2 ** 30          # free physical and free commit: the smaller binds
+    except Exception:
+        return 8.0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--workers", type=int, default=0, help="parallel copies (default: most cores)")
+    ap.add_argument("--workers", type=int, default=0, help="parallel copies (default: by free memory)")
     ap.add_argument("--sim", type=float, default=200.0, help="simulated seconds per copy per round")
     ap.add_argument("--rounds", type=int, default=2)
     ap.add_argument("--eval-sim", type=float, default=150.0)
     ap.add_argument("--eval-only", action="store_true")
     ap.add_argument("--fresh", action="store_true", help="ignore an existing model")
+    ap.add_argument("--job-sim", type=float, default=90.0, help="simulated seconds per job (smaller = less memory held)")
     a = ap.parse_args()
     ncpu = os.cpu_count() or 4
-    workers = a.workers or max(2, min(ncpu - 4, 12))
-    print(f"{workers} parallel copies of the person, {a.sim:.0f} simulated seconds each per round")
+    free = free_memory_gb()
+    by_mem = max(2, int(free / 1.6))
+    workers = a.workers or max(2, min(ncpu - 4, by_mem, 12))
+    print(f"{workers} parallel copies of the person ({free:.1f} GB free), "
+          f"{a.sim:.0f} simulated seconds per copy per round", flush=True)
     space = make_space()
-    print(f"behaviour space: {len(space.layout)} channels, ~10^{sum(np.log10(float(s)) for _, s in space.layout):.1f} descriptors")
+    print(f"behaviour space: {len(space.layout)} channels, ~10^{sum(np.log10(float(s)) for _, s in space.layout):.1f} descriptors",
+          flush=True)
     if a.fresh and MODEL_PATH.exists():
         MODEL_PATH.unlink()
 
+    def make_jobs(base_seed, total_per_copy, safe, mode_mix=True, model_weight_rule=None):
+        n_each = max(1, int(round(total_per_copy / a.job_sim)))
+        jobs = []
+        for w in range(workers):
+            for k in range(n_each):
+                jobs.append({"seed": base_seed + 97 * w + 7919 * k, "sim": min(a.job_sim, total_per_copy),
+                             "mode": "auto" if w % 2 == 0 else "ambient", "safe": safe,
+                             "model_weight": model_weight_rule(w) if model_weight_rule else 0.0})
+        return jobs
+
     all_results: list[dict] = []
+    info = None
     if not a.eval_only:
         for rnd in range(1, a.rounds + 1):
             t0 = time.time()
-            jobs = []
-            for w in range(workers):
-                jobs.append({"seed": 1000 * rnd + w, "sim": a.sim,
-                             "mode": "auto" if w % 2 == 0 else "ambient",
-                             "safe": False,
-                             # later rounds: half the copies babble under the current model
-                             "model_weight": 2.0 if (rnd > 1 and w % 4 >= 2) else 0.0})
+            rule = (lambda w: 2.0 if w % 4 >= 2 else 0.0) if rnd > 1 else None
+            jobs = make_jobs(1000 * rnd, a.sim, False, model_weight_rule=rule)
             res = run_pool(jobs, workers)
             all_results += res
-            print(f"round {rnd}: {time.time() - t0:.0f}s wall")
+            print(f"round {rnd}: {time.time() - t0:.0f}s wall, {len(jobs)} jobs", flush=True)
             summarize(f"round {rnd} babbling", res)
-            info = fit(space, pooled(all_results))
+            recs = pooled(all_results)
+            if len(recs) < 40:
+                print("  too few behaviours to fit yet", flush=True)
+                continue
+            info = fit(space, recs)
             print(f"  fitted on {info['n']} behaviours (unsafe rate {100 * info['unsafe_rate']:.1f}%): "
                   f"held-out AUC {info['heldout_auc']:.3f}, log-loss {info['heldout_logloss']:.3f} "
-                  f"(constant predictor {info['constant_logloss']:.3f})")
-        print("  riskiest parts:", ", ".join(f"{n} ({w:+.2f})" for n, w in info["top_risks"][:10]))
+                  f"(constant predictor {info['constant_logloss']:.3f})", flush=True)
+        if info:
+            print("  riskiest parts:", ", ".join(f"{n} ({w:+.2f})" for n, w in info["top_risks"][:10]), flush=True)
 
-    print("evaluation (fresh copies, same budget)")
+    print("evaluation (fresh copies, same budget)", flush=True)
     ev = []
     for safe in (False, True):
-        jobs = [{"seed": 9000 + w + (500 if safe else 0), "sim": a.eval_sim,
-                 "mode": "auto" if w % 2 == 0 else "ambient", "safe": safe}
-                for w in range(workers)]
+        jobs = make_jobs(9000 + (500 if safe else 0), a.eval_sim, safe)
         res = run_pool(jobs, workers)
         ev.append(summarize("with the learned safety model" if safe else "unconstrained babbling", res))
     out = {"workers": workers, "sim_per_copy": a.sim, "rounds": a.rounds,
-           "training_behaviours": len(pooled(all_results)), "evaluation": ev}
+           "training_behaviours": len(pooled(all_results)), "evaluation": ev,
+           "heldout_auc": info["heldout_auc"] if info else None}
     (ROOT / "out").mkdir(exist_ok=True)
     (ROOT / "out" / "train_body_report.json").write_text(json.dumps(out, indent=1))
-    print("saved model:", MODEL_PATH, "| report: out/train_body_report.json")
+    print("saved model:", MODEL_PATH, "| report: out/train_body_report.json", flush=True)
     return 0
 
 
