@@ -65,7 +65,7 @@ step title as "?" because of a Windows path problem in `helper.sh`; this is a kn
 
 `tools/openrouter_helper/readme_helper/` is a separate agent that sends **one** prompt describing the whole
 project and the current README to `nemotron-3-super-120b-a12b:free` and installs the reply as `README.md` (with
-`--apply`; a backup is kept under `state/backups/`). In `loop --apply` mode it does this every hour. Its two
+`--apply`; a backup is kept under `state/backups/`). In `loop --apply` mode it does this every hour. Its three
 applied runs on 2026-10-07 reduced a 1,028-line README to 66–69 lines. The README you are reading is therefore
 built **deterministically** by `tools/build_readme.py` from `docs/readme_src/`, and a copy is kept at
 `docs/README_full.md`; if the hourly agent is running it will overwrite `README.md` again (see Appendix B for

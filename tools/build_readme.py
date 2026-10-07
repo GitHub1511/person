@@ -140,7 +140,23 @@ def diag_list() -> str:
     return table(rows, ["script", "lines", "what it measures"])
 
 
-GEN = {"CODEMAP": codemap, "PATCHES": patches, "BEHAVIOR_CHANNELS": behavior_channels,
+def policies() -> str:
+    names = json.loads((DATA / "runtime_base.json").read_text())["extra"]["policy_names"]
+    cols = 5
+    n = len(names)
+    per = -(-n // cols)
+    rows = []
+    for r in range(per):
+        rows.append([f"{r + c * per + 1}. `{names[r + c * per]}`" if r + c * per < n else "" for c in range(cols)])
+    return table(rows, [" "] * cols)
+
+
+def getup_status() -> str:
+    f = DATA / "getup_status.txt"
+    return f.read_text(encoding="utf-8").strip() if f.exists() else         "No success rate is claimed: the recovery diagnostic had not been run to completion when this was written."
+
+
+GEN = {"POLICIES": policies, "GETUP_STATUS": getup_status, "CODEMAP": codemap, "PATCHES": patches, "BEHAVIOR_CHANNELS": behavior_channels,
        "COMPLEXITY_TABLE": complexity_table, "TOOLS": tools_list, "DIAGS": diag_list}
 
 
