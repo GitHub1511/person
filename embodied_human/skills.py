@@ -1843,12 +1843,17 @@ class SkillSystem:
                     else:
                         released_r = False
                 yield
+            if not ok:
+                raise ActionFailed(
+                    f"stand_up: unroll never stabilized "
+                    f"(COM {sk._rec_com():.2f} m)")
         finally:
-            for s in "lr":
-                try:
-                    sk.arm[s].stop()
-                except Exception:
-                    pass
+            if not ok:
+                for s in "lr":
+                    try:
+                        sk.arm[s].stop()
+                    except Exception:
+                        pass
     def _rec_table_assist(self) -> bool:
         """Climb the workbench leg hand-over-hand: plant both hands low on
         the nearest corner leg, alternate reaching higher rungs while the
