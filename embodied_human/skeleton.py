@@ -289,7 +289,7 @@ def build_bones() -> list[Bone]:
             joints=[
                 hinge(f"sh_{s}_abd", (0, 1, 0), abd_lo, abd_hi, T["sh_abd"], armature=0.10),
                 # negative = raise the arm forwards
-                hinge(f"sh_{s}_flex", (1, 0, 0), -2.60, 0.90, T["sh_flex"], armature=0.10),
+                hinge(f"sh_{s}_flex", (1, 0, 0), -2.60, 0.95, T["sh_flex"], armature=0.10),
                 hinge(f"sh_{s}_rot", (0, 0, 1), -1.60, 1.60, T["sh_rot"], armature=0.06),
             ],
             geoms=[sphere((0, 0, 0), 0.062, MASSES["upper_arm"] * 0.13,
