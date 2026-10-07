@@ -161,8 +161,12 @@ def _odor(*pairs: tuple[int, float], dim: int = 24) -> np.ndarray:
 # --------------------------------------------------------------------------
 # The workbench is in front of the person (who faces -y); the shelf is across
 # the room, far enough that carrying something to it means actually walking.
+# The table sits well clear of the spawn point so falls and recoveries happen
+# on open floor; object y positions below are offsets from TABLE_Y so the
+# layout moves as one.
+TABLE_Y = -1.20
 FURNITURE = [
-    ("table", 0.0, -0.82, 0.74, 0.46, 0.30),
+    ("table", 0.0, TABLE_Y, 0.74, 0.46, 0.30),
     ("shelf", 0.0, -3.40, 0.74, 0.40, 0.26),
 ]
 TABLE_THICKNESS = 0.025
