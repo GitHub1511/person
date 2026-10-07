@@ -1163,9 +1163,6 @@ class ReceptorSystem:
             state.site_pos.get("gaze", state.gaze_pos) if hasattr(state, 'site_pos') else np.zeros(3))
         mouth_pos = world_mouth_pos if world_mouth_pos is not None else (
             state.site_pos.get("mouth", state.gaze_pos) if hasattr(state, 'site_pos') else np.zeros(3))
-        if world is not None:
-            olf[:] = world.get_odorant_concentration(nose_pos) * np.ones_like(olf)
-            gus[:] = world.get_tastant_concentration(mouth_pos) * np.ones_like(gus)
 
         olf, gus, chemo_sum = self.chemo.sense(model, data, meta, state)
         # override with world emission if present
