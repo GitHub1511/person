@@ -28,7 +28,7 @@ TIPS = {
 
 def knock_down(ag, tip: str) -> None:
     ra = ag.meta.root_qpos_addr
-    # Open floor, well clear of the table (0,-0.82) and shelf: pure floor
+    # Open floor, well clear of the table (0,TABLE_Y) and shelf: pure floor
     # recovery, no furniture interference. Furniture cases are separate.
     ag.data.qpos[ra] = 1.2
     ag.data.qpos[ra + 1] = 0.6
