@@ -100,6 +100,19 @@ hand_pose("right", "fist")  hand shapes: open relaxed fist point pinch thumbs_up
 gesture("wave")             wave nod shake_head shrug clap thumbs_up think scratch_head drink bow
 crouch() / stand()          lower yourself / stand tall
 say("words")                say something out loud; the words appear above your head
+blink("slow")               blink on purpose: normal slow double wink_left wink_right
+touch_self("eyes", "right", "rub")   put a hand on your own body. parts: eyes cheek nose mouth chin
+                            forehead scalp ear neck chest abdomen shoulder upper_arm forearm thigh hip;
+                            how: rest rub tap scratch
+express(head="left", lids="squint", torso="slouch", left_arm="wave_pose", style="slow")
+                            a whole-body expression, any subset of: head gaze (forward left right up down
+                            left_up ...) lids (wide normal squint droopy) blink mouth (closed open wide)
+                            voice (hum sigh cough gasp laugh yawn murmur whistle) torso (upright slouch
+                            lean_forward lean_back twist_left bow ...) left_arm right_arm (rest hand_on_hip
+                            arms_crossed hand_to_chest hand_to_cheek wave_pose point_forward cheer shrug_out
+                            hug_upper stretch_back ...) left_hand right_hand (open relaxed fist point pinch
+                            claw ...) stance (normal crouch shift_left lean_in) style (slow fast trembling
+                            sway pulse small large gentle restless)
 wait(seconds)               do nothing for a while
 nothing()                   do nothing"""
 
@@ -123,6 +136,8 @@ ALLOWED_CALLS = {
     "reach": "reach", "point_at": "point_at", "hand_pose": "hand_pose",
     "gesture": "gesture", "crouch": "crouch", "stand": "stand", "wait": "wait",
     "nothing": None, "stop": "stop",
+    "blink": "blink", "touch_self": "touch_self", "express": "express",
+    "rub_eyes": "rub_eyes", "scratch": "scratch",
 }
 
 
@@ -262,6 +277,39 @@ class PerceptBuilder:
             ctx["social_need"] = float(dr.level[DRIVES.index("social_need")])
         ctx["urgent"] = urgent
         ctx["touch"] = {s: sk.hands[s].contact_obj for s in "lr"}
+        # the eyes and the rest of the inner body
+        oc = ag.ocular.out
+        body = []
+        if oc.dryness > 0.2 or oc.burning > 0.2:
+            body.append(f"your eyes feel {'dry' if oc.dryness >= oc.burning else 'burning'} "
+                        f"({_level_word(max(oc.dryness, oc.burning))})")
+        if oc.grit > 0.25:
+            body.append("your eyes feel gritty, as if something is in them")
+        if oc.blur > 0.35:
+            body.append("your vision is a little blurry")
+        if oc.blink_rate > 26:
+            body.append("you have been blinking a lot")
+        elif oc.blink_rate < 6 and oc.tbut > 8:
+            body.append("you have been staring without blinking")
+        if oc.tearing > 0.4:
+            body.append("your eyes are wet with tears")
+        inner = getattr(ag, "inner", None)
+        if inner is not None:
+            o = inner.out
+            if o.muscle_soreness > 0.25:
+                body.append("your muscles ache")
+            elif o.muscle_fatigue > 0.3:
+                body.append("your muscles feel tired")
+            if o.gut_discomfort > 0.4:
+                body.append("your stomach is uncomfortable")
+            if o.sleep_pressure > 0.7:
+                body.append("you are very sleepy")
+            if o.rumination > 0.5:
+                body.append("your thoughts keep circling something unpleasant")
+            elif o.mind_wandering > 0.6:
+                body.append("your mind is wandering")
+            ctx["clock_hour"] = o.clock_hour
+        ctx["body_feelings"] = body
         return ctx
 
     # ------------------------------------------------------------------
@@ -298,6 +346,7 @@ class PerceptBuilder:
             feel.append(f"{nm.replace('_', ' ')}: {_level_word(lv)}")
         if ctx.get("curiosity", 0) > 0.35:
             feel.append("you feel curious")
+        feel += ctx.get("body_feelings", [])
         L.append("Inside: " + "; ".join(feel) + ".")
         if ctx["events"]:
             L.append("Just happened: " + "; ".join(ctx["events"][-4:]) + ".")
