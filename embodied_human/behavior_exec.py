@@ -32,6 +32,7 @@ from collections import Counter
 import numpy as np
 
 from ._fast import fclip
+from .body_learning import BodySafety
 from .behavior_space import (ARM_SCHEMAS, ARM_VAR, BLINK_PATTERNS, GAZE_PITCH, GAZE_YAW,
                              HAND_SHAPES, HAND_VAR, HEAD_PITCH, HEAD_TILT, HEAD_YAW,
                              HOLD_SECONDS, INTENT_MODES, JAW_LEVELS, LID_APERTURE,
@@ -120,7 +121,7 @@ class BehaviorSelector:
 
     def sample(self, desire: np.ndarray, current: np.ndarray, n: int, *,
                ambient: bool, allow_walk: bool, tau: float, objects_ok: bool = True,
-               ) -> list[np.ndarray]:
+               boost: float = 1.0) -> list[np.ndarray]:
         sp = self.space
         rng = self.rng
         sc = self.scores(desire)
@@ -133,6 +134,8 @@ class BehaviorSelector:
             d = (current if (rng.random() < 0.30 and not ambient) else neutral).copy()
             for g, chans in GROUPS.items():
                 p = P[g] * (0.55 + 1.6 * mean_d) if g not in ("hold", "style") else P[g]
+                if g not in ("hold", "style"):
+                    p = p * boost
                 if g == "walk" and not allow_walk:
                     p = 0.0
                 if g == "intent" and not objects_ok:
@@ -223,6 +226,18 @@ class BehaviorExecutor:
                                       and n != "jaw_open" for n in names])
         self.history: list[tuple[float, str]] = []
         self._pending: Behavior | None = None
+        # ---- learning to use the body (see body_learning.py) ---------------------
+        self.safety = BodySafety(self.space)
+        self.safety_weight = 5.0          # weight of the predicted hazard in G
+        self.learn_online = True
+        self.explore_boost = 1.0          # >1: gate more channels (used when babbling)
+        self.desire_noise = 0.0
+        self.repeat_penalty = 3.0
+        self.run_max_off = 0.0
+        self.run_fell = False
+        self.outcomes: list[tuple] = []   # (descriptor, unsafe, max_com_off, duration, fell)
+        self._recent: list[np.ndarray] = []
+        self.unsafe_off = 0.10            # m of centre-of-mass excursion that counts as unsafe
 
     # ------------------------------------------------------------------
     # desire: what the person's condition makes attractive
@@ -270,8 +285,12 @@ class BehaviorExecutor:
         a = ag.affect_frame
         arousal = float(a.arousal) if a is not None else 0.3
         tau = 0.55 + 0.7 * arousal + 0.3 * float(desire[TI["boredom"]])
+        if self.desire_noise > 0:
+            desire = np.clip(desire + self.desire_noise * self.rng.standard_normal(NT).clip(-2, 2) * 0.5
+                             + self.desire_noise * self.rng.random(NT) * 0.5, 0.0, 1.6)
+            self.last_desire = desire
         cands = sel.sample(desire, self.cur_desc, self.n_candidates, ambient=self.ambient,
-                           allow_walk=self.allow_walk, tau=tau)
+                           allow_walk=self.allow_walk, tau=tau, boost=self.explore_boost)
         # keep a few simple "do nothing special" options in the pool: stillness is a choice
         for _ in range(3):
             cands.append(self.space.neutral())
@@ -298,9 +317,17 @@ class BehaviorExecutor:
             risk = 0.5 * float(np.sum(((pred - pref) ** 2) * prec))
             motor = 0.0015 * float(np.sum((tgt - self.cmd) ** 2)) * b.speed
             aff = sel.affinity(d, sc) * (0.6 if self.ambient else 1.0)
+            # what the body has learned about which behaviours unbalance it: the
+            # hazard -log(1-p) is a free-energy-like cost that grows without bound
+            p_unsafe = self.safety.risk(b) if self.safety_weight > 0 else 0.0
+            hazard = -math.log(max(1.0 - p_unsafe, 1e-3))
+            # boredom with repetition: options used in the last few behaviours cost more
+            rep = self._repetition(d)
             # tremor / big amplitude cost a little; large hold means commitment
             G[i] = 0.55 * risk + motor + 0.08 * b.hold - sel.gain * aff \
-                + 0.5 * b.tremor * 10
+                + 0.5 * b.tremor * 10 + self.safety_weight * hazard \
+                + (4.0 * max(p_unsafe - 0.6, 0.0) * self.safety_weight) \
+                + self.repeat_penalty * rep
         G = G - G.min()
         temp = max(0.15, 0.9 * (0.6 + arousal))
         z = -G / temp
@@ -313,7 +340,42 @@ class BehaviorExecutor:
         return compiled[k]
 
     # ------------------------------------------------------------------
+    def _repetition(self, d: np.ndarray) -> float:
+        """Fraction of this candidate's non-neutral parts that it shares with the
+        last few behaviours (0 = entirely new)."""
+        if not self._recent:
+            return 0.0
+        ci = self.space.channel_index
+        neu = self.space.neutral()
+        ch = [ci[c] for c in SCORED]
+        mine = d[ch]
+        active = mine != neu[ch]
+        if not active.any():
+            return 0.0
+        tot = 0.0
+        for r in self._recent:
+            tot += float(np.mean((r[ch] == mine)[active]))
+        return tot / len(self._recent)
+
+    def _close_outcome(self, now: float) -> None:
+        """What happened to the body while the last behaviour ran -- and learn it."""
+        if self.stats.n == 0:
+            return
+        b = self.current
+        dur = now - self.t_start
+        if dur < 0.3:
+            return
+        unsafe = bool(self.run_fell or self.run_max_off > self.unsafe_off)
+        self.outcomes.append((b.desc.copy(), unsafe, self.run_max_off, dur, self.run_fell))
+        if self.learn_online and not self.run_fell:
+            self.safety.update(b, 1.0 if unsafe else 0.0)
+        self._recent.append(b.desc.copy())
+        self._recent = self._recent[-6:]
+
     def begin(self, b: Behavior, now: float) -> None:
+        self._close_outcome(now)
+        self.run_max_off = 0.0
+        self.run_fell = False
         self.current = b
         self.cur_desc = b.desc.copy()
         self.t_start = now
@@ -400,6 +462,11 @@ class BehaviorExecutor:
         b = self.current
         t = now - self.t_start
         env = self._style_envelope(b, t)
+        if ag.state is not None:
+            off = float(np.hypot(ag.state.com_over_support[0] * 1.3, ag.state.com_over_support[1]))
+            self.run_max_off = max(self.run_max_off, off)
+            if ag.state.fallen:
+                self.run_fell = True
 
         # ---- joint command ------------------------------------------------------
         owned = self.owned_joints.copy()
