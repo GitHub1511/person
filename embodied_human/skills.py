@@ -1579,15 +1579,26 @@ class SkillSystem:
         self.gesture_active = False
         self.recovery_active = True
         try:
-            yield from self._rec_roll()
+            # Curl into a ball first: always feasible (no ground leverage
+            # needed), and a balled body rolls far easier than a sprawled one.
             yield from self._rec_hold(
-                {"elbow_l": -0.05, "elbow_r": -0.05,
-                 "sh_l_flex": 0.45, "sh_r_flex": 0.45,
-                 "spine_bend": -0.05, "chest_bend": 0.0,
-                 "hip_l_flex": -0.10, "hip_r_flex": -0.10,
-                 "knee_l": 0.15, "knee_r": 0.15},
-                5.0, lambda: self._rec_com() > 0.35, "push",
-                proceed=lambda: self._rec_com() > 0.30)
+                {"knee_l": 2.00, "knee_r": 2.00,
+                 "hip_l_flex": -1.20, "hip_r_flex": -1.20,
+                 "spine_bend": 0.40, "chest_bend": 0.25,
+                 "elbow_l": -1.00, "elbow_r": -1.00},
+                0.1, lambda: False, "curl", proceed=lambda: True)
+            yield from self._rec_roll()
+            # Fold onto the knees with the strong hip/knee motors (the weak
+            # shoulders cannot push-up 70 kg): feet press behind, torso rides
+            # up and back onto the knees.
+            yield from self._rec_hold(
+                {"knee_l": 2.20, "knee_r": 2.20,
+                 "hip_l_flex": -1.50, "hip_r_flex": -1.50,
+                 "spine_bend": 0.40, "chest_bend": 0.25,
+                 "sh_l_flex": -0.40, "sh_r_flex": -0.40,
+                 "elbow_l": -0.50, "elbow_r": -0.50},
+                6.0, lambda: self._rec_com() > 0.40, "fold",
+                proceed=lambda: self._rec_com() > 0.32)
             yield from self._rec_hold(
                 {"knee_l": 1.80, "knee_r": 1.80,
                  "hip_l_flex": -1.20, "hip_r_flex": -1.20,
