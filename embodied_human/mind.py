@@ -760,6 +760,7 @@ class Mind:
         bal = float(getattr(getattr(self.agent, "motor", None),
                             "balance_error", 0.0) or 0.0)
         fallen = bool(st is not None and st.fallen)
+        loco_done = False
         for name, args, kwargs in reply.calls:
             target = ALLOWED_CALLS.get(name)
             if target is None:
@@ -768,6 +769,13 @@ class Mind:
                                      "reach", "put_down", "crouch"):
                 sk.events.append(f"FAILED {name}: I am on the floor, cannot move")
                 continue
+            if target in ("walk_to", "walk", "turn", "face", "grab",
+                          "put_down", "reach"):
+                if loco_done:
+                    sk.events.append(
+                        f"(skipped {name}: one move per turn; reconsider next thought)")
+                    continue
+                loco_done = True
             if bal > 0.06 and target in ("walk_to", "walk", "grab", "reach"):
                 # Unstable: stop first so the next think sees a calm body.
                 try:

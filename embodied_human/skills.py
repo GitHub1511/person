@@ -978,6 +978,18 @@ class SkillSystem:
                 g.walk(speed, float(np.clip(1.4 * e, -0.35, 0.35)) * slow)
             if self._fell():
                 raise ActionFailed("I fell over")
+            bal = float(getattr(self.agent.motor, "balance_error", 0.0) or 0.0)
+            if bal > 0.12:
+                bad = getattr(self, "_walk_bad", 0.0) + TICK
+                self._walk_bad = bad
+            else:
+                self._walk_bad = 0.0
+            if getattr(self, "_walk_bad", 0.0) > 0.6:
+                g.stop()
+                self._walk_bad = 0.0
+                yield from self._wait_gait_idle()
+                raise ActionFailed(
+                    f"lost balance ({bal:.3f} m), stopped to recover")
             if self.agent.t - t0 > 12.0 + 6.0 * d0:
                 g.stop()
                 raise ActionFailed("could not get there in time")
