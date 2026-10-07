@@ -22,7 +22,7 @@ generated from inside its own body.
 | The "mind" hook for the Absolute Zero Reasoner (§16.5) | `mind.py`, `run_mind.py` | prompt/parse/dispatch tested against a fake server; **AZR itself has never been run** |
 | Scalable complexity: skin density, sensory-cell populations, eyes, inner world (§17) | `complexity.py`, `senses_ext.py`, `ocular.py`, `inner_*.py` | built and unit-exercised; **sizes and speed at `rich`/`extreme` are not yet measured** (`tools/scale_complexity.py --measure` has not been completed) |
 | Generative behaviour space + learned body safety (§17.5-§17.6) | `behavior_*.py`, `body_learning.py`, `tools/train_body.py` | trained and evaluated at `base`: falls per sim-hour 307 -> 87 (§17.6); still falls |
-| Unattended planner + coder loop on free OpenRouter models (§18) | `tools/openrouter_helper/` | offline tests pass; two live steps ran and were accepted by its checks, but **both degraded olfaction/taste** (§18.1); stopped, nothing reverted |
+| Unattended planner + coder loop on free OpenRouter models (§18) | `tools/openrouter_helper/` | offline tests pass; two live steps ran and passed its checks but **both degraded olfaction/taste** (§18.1); **both were reverted**, the loop is stopped |
 
 ```bash
 python -m pip install mujoco numpy matplotlib
@@ -967,9 +967,9 @@ Verdict: **accepted by the safety net, not acceptable as work.**  Verify cannot
 see this kind of damage because the smoke run never touches smell or taste.
 `git log` shows the changes as `autosave:` commits from about 08:28 to 08:41 on
 2026-10-07; `git diff 9bdca1b HEAD -- embodied_human` is both steps together
-(9bdca1b is the last commit before step 1).  Recommended: revert both and ask the
-planner for a smaller task, or fix `ChemoSystem.sense` by hand.  Nothing has
-been reverted; that is the owner's call.
+(9bdca1b is the last commit before step 1).  **Both steps were reverted** at the owner's request: the eight edited files
+under `embodied_human/` were restored to their state before step 1 and the new
+`stimuli.py` was removed.
 
 Known helper bug: `state/history.jsonl` records the step title as "?" (the
 title is read with a path Windows Python cannot open).  Not fixed yet because the
@@ -983,3 +983,46 @@ script was running.
   changes.  `state/history.jsonl` lists each step and its verdict;
   `state/pi_audit.jsonl` lists every tool call.
 * The OpenRouter key was pasted into a chat to set this up; rotate it.
+
+---
+
+## 19. The ultra tier (in progress)
+
+Two new levels, `ultra` and `mega`, sit above `max`.  They keep the classic body at `max` size
+and add **plug-in subsystems** (`embodied_human/ux_*.py`) that run beside it through a shared
+bus (`embodied_human/ultra.py`).  A subsystem can be written, tested and benchmarked without
+the simulator (`ultra.SyntheticBus`), declares its own sizes per level, update rate, memory and
+wall-time budget, and is checked by `tools/ultra_bench.py`; `tools/simlock.py` keeps many
+workers from exhausting RAM.  An optional wall-clock governor stretches update periods when the
+machine is busy.  Conventions: `docs/ultra/CONVENTIONS.md`.
+
+**Measured baseline (2026-10-07, `python tools/scale_complexity.py --measure base rich extreme`,
+output in `out/measure_baseline.txt`):**
+
+| | base | rich | extreme |
+|---|---|---|---|
+| skin taxels | 1,992 | 7,968 | 17,928 |
+| sensory scalars per frame | 52,981 | 346,406 | 778,054 |
+| internal dynamic variables | - | 15,066 | 36,932 |
+| episodic store values | - | 137,216 | 405,504 |
+| ms per physics step | 1.87 | 2.37 | 3.95 |
+| speed (x real time) | 0.54 | 0.42 | 0.25 |
+
+**Targets** for the new tiers (the sum over all subsystems; state that is updated by dynamics,
+not padding): `ultra` >= 3 million internal state variables and >= 5 million new sensory/event
+scalars within 6 s of extra wall time per simulated second and 2.5 GB; `mega` >= 40 million
+state variables within 40 s and 8 GB, one instance.  The machine limits (i7-14700, 32 GB with
+5-10 GB usually free, a 6 GB GPU that LM Studio already fills, numpy only) decide how much of this
+is actually reached; the results are reported below as they are measured, and nothing here is a
+claim until a benchmark number backs it.
+
+**Status:** framework, tools, conventions and a design pass for 20 domains exist; domain
+implementations are being built in waves.  Measured results will be added to this section as each
+wave lands.
+
+**Language-model mind.**  An Absolute Zero Reasoner (`absolute_zero_reasoner-coder-3b`, Q4_K_S,
+1.85 GB, 3.1B parameters) is already loaded in LM Studio at `http://localhost:1234` (its
+OpenAI-compatible `/v1/completions` works with the existing `<think>/<answer>` prompt: a trial
+prompt produced `walk_to("apple")` with a short reasoning trace).  No download was needed.  Wiring
+it in as the live mind and making it better at navigation is a separate stream (see
+`docs/ultra/azr_navigation.md` once written); the model's weights are **not** fine-tuned.
