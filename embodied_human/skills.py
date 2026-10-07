@@ -2241,6 +2241,7 @@ class SkillSystem:
         tail_com = self._rec_com()
         self._rec_caught = bool(tucked) and (peak > 0.30 or tail_com > 0.22)
         if tail_com > 0.30 or peak > 0.30:
+            self._rec_cobra_ok = True
             self.events.append("stand_up: cobra up")
             return
         if peak > 0.24 or tail_com > 0.22:
