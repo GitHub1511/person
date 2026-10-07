@@ -1615,6 +1615,7 @@ class SkillSystem:
         self._rec_caught = False
         self._rec_walked = False
         self._rec_lunged = False
+        self._rec_pressed = False
         try:
             # Curl into a ball first: always feasible (no ground leverage
             # needed), and a balled body rolls far easier than a sprawled one.
@@ -1639,6 +1640,8 @@ class SkillSystem:
                      "elbow_l": -0.40, "elbow_r": -0.40},
                     6.0, lambda: self._rec_com() > 0.70, "lunge-press")
                 self._rec_pressed = True
+                self.events.append("stand_up: pressed up from lunge")
+                self._rec_pressed = True
             elif table_ok:
                 self._rec_caught = True
                 self.events.append("stand_up: table climb worked, kneeling")
@@ -1646,7 +1649,7 @@ class SkillSystem:
                 if not table_ok:
                     # Caught a big roll onto the folded knees: straight to kneel.
                     self.events.append("stand_up: caught the roll, kneeling")
-            else:
+            elif not self._rec_pressed:
                 # Cobra setup: bring the hands back BESIDE the chest with
                 # bent elbows (pressing from overhead arms pushes only air).
                 yield from self._rec_hold(
