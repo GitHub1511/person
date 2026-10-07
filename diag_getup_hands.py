@@ -49,7 +49,13 @@ for name, arm in POSES.items():
     sk.recovery_targets = tgt
     for _ in range(400):
         ag.step()
-    renderer.update_scene(ag.data, camera="observer", scene_option=opt)
+    cam = mujoco.MjvCamera()
+    cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+    cam.lookat[:] = ag.state.com
+    cam.distance = 2.0
+    cam.elevation = -8.0
+    cam.azimuth = 135.0
+    renderer.update_scene(ag.data, camera=cam, scene_option=opt)
     shots.append(renderer.render().copy())
     print(name, "com_z=%.2f" % ag.state.com[2])
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
