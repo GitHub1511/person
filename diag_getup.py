@@ -58,18 +58,24 @@ def trial(tip: str, auto: bool) -> dict:
         ag.skills.api_stand_up()
     t0 = ag.t
     bals = []
+    com_peak = 0.0
+    i = 0
     while ag.t - t0 < 45.0:
         ag.step()
         bals.append(ag.motor.balance_error)
+        i += 1
+        if i % 100 == 0:
+            com_peak = max(com_peak, float(ag.state.com[2]))
     st = ag.state
     ok = (not st.fallen) and float(st.com[2]) > 0.72
     return {"tip": tip, "auto": auto, "fell_after_tip": fell0,
             "com_after_tip": round(com0, 3),
             "stood_up": bool(ok), "fallen": bool(st.fallen),
             "com_z": round(float(st.com[2]), 3),
+            "com_peak": round(com_peak, 3),
             "mean_bal": round(float(np.mean(bals)), 4),
             "max_bal": round(float(np.max(bals)), 4),
-            "events": ag.skills.events[-4:]}
+            "events": [e for e in ag.skills.events if "stand_up" in e or "fallen" in e or "got back" in e]}
 
 
 def main() -> int:
@@ -85,7 +91,7 @@ def main() -> int:
         print(f"[trial {i}] tip={r['tip']} auto={r['auto']} "
               f"fell_after_tip={r['fell_after_tip']} com0={r['com_after_tip']} "
               f"-> stood_up={r['stood_up']} fallen={r['fallen']} "
-              f"com_z={r['com_z']} mean_bal={r['mean_bal']} max_bal={r['max_bal']}")
+              f"com_z={r['com_z']} peak={r['com_peak']} mean_bal={r['mean_bal']} max_bal={r['max_bal']}")
         for e in r["events"]:
             print(f"    event: {e}")
     ok = all(r["stood_up"] for r in rows)
