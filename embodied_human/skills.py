@@ -593,7 +593,9 @@ class SkillSystem:
                 return                    # inaudible: no entry, no poke, silence
             loud_now = V
             words = raw.split(" ")
-            keep_p = float(np.clip(conf, 0.05, 0.95))
+            # Retention saturates: above conf 0.75 the channel is clear and
+            # every word survives; below, audibility degrades word by word.
+            keep_p = float(np.clip((conf - 0.25) / 0.5, 0.05, 1.0))
             tick = int(t_ready * 10)
             heard_w, masked = [], 0
             for i, wd in enumerate(words):
