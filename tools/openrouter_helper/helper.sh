@@ -15,6 +15,13 @@
 #                    untouched); on FAIL it rolls the files back; records the outcome; goes to 1
 #   plan        just step 1-3 once
 #   coder       run just the Pi coder step once (needs state/next_task.md)
+#   goal TEXT   set the standing user goal the loop builds towards (see `run-goal`)
+#   goal-clear  drop the standing goal (loop returns to thesis-driven steps)
+#   run-goal TEXT [N]
+#               set the goal (max N cycles, default 10) and run Pi recursively
+#               towards it: plan -> Pi coder -> verify -> rollback on FAIL
+#   ui [PORT]   serve the local web console (goal box + live feedback) on
+#               127.0.0.1:8770; open it in a browser, type a goal, press Start
 #   done        tell `run` the coder has finished (or `touch state/CODER_DONE`)
 #   verify      PASS / FAIL for the current tree        rollback   undo back to the snapshot
 #   snapshot    snapshot now                            resources  how many simulations fit right now
@@ -24,8 +31,11 @@
 #
 # Knobs (environment): RUN_WAIT_TIMEOUT (seconds to wait for a coder per step, default 21600),
 #   AUTO_ROLLBACK=1 (default) roll back a failed step, PLAN_TIMEOUT, OR_PORT, HELPER_ROOT,
-#   AUTO_CODER=1 (default) start Pi itself, CODER_TIMEOUT (default 3600), PI_MAX_TOOL_CALLS (400).
+#   AUTO_CODER=1 (default) start Pi itself, CODER_TIMEOUT (default 3600), PI_MAX_TOOL_CALLS (400),
+#   OR_UI_PORT (default 8770) for the web console.
 # The API key is read from tools/openrouter_helper/.env (or $OPENROUTER_API_KEY) and is never printed.
+# Recursive goal mode: `run-goal "prompt"` (or the web console) stores the prompt in
+# state/user_goal.md; the planner must aim every step at it and Pi executes each step.
 
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -185,8 +195,29 @@ cmd_run() {
       hl record "$title" "rejected" "$(echo "$out" | head -1 | cut -c1-280)"
       if [ "${AUTO_ROLLBACK:-1}" = "1" ]; then log "verification failed: rolling back"; hl rollback; fi
     fi
+    hl goal-tick >/dev/null 2>&1 || true   # count the cycle; writes STOP at the goal budget
   done
   proxy_stop; log "helper stopped"
+}
+
+cmd_goal() {
+  [ -n "${1:-}" ] || { log "usage: helper.sh goal TEXT"; return 2; }
+  hl goal-set "$1" --max-cycles "${2:-10}"
+}
+
+cmd_run_goal() {
+  [ -n "${1:-}" ] || { log "usage: helper.sh run-goal TEXT [MAX_CYCLES]"; return 2; }
+  hl goal-set "$1" --max-cycles "${2:-10}" || return 1
+  log "goal set; running Pi recursively towards it (budget ${2:-10} cycles)"
+  AUTO_CODER=1 cmd_run
+}
+
+cmd_ui() {
+  local port="${1:-${OR_UI_PORT:-8770}}"
+  proxy_start || return 1
+  export OR_UI_PORT="$port"
+  log "opening the helper console on http://127.0.0.1:$port  (type a goal, press Start)"
+  "$PY" "$HERE/ui.py" --port "$port"
 }
 
 cmd_serve() {
@@ -213,6 +244,10 @@ cmd_status() {
 
 case "${1:-}" in
   run)        cmd_run ;;
+  run-goal)   shift; cmd_run_goal "$@" ;;
+  goal)       shift; cmd_goal "$@" ;;
+  goal-clear) hl goal-clear ;;
+  ui)         shift; cmd_ui "$@" ;;
   plan)       cmd_plan ;;
   coder)      proxy_start && coder_run ;;
   serve)      cmd_serve ;;
@@ -227,5 +262,5 @@ case "${1:-}" in
   record)     shift; hl record "$@" ;;
   status)     cmd_status ;;
   stop)       touch "$STATE/STOP"; proxy_stop; log "stop requested" ;;
-  *)          sed -n '2,28p' "${BASH_SOURCE[0]}" ;;
+  *)          sed -n '2,35p' "${BASH_SOURCE[0]}" ;;
 esac

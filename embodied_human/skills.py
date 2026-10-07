@@ -402,6 +402,7 @@ class SkillSystem:
         self.gesture_active = False
         self.recovery_targets: dict[str, float] = {}
         self.recovery_active = False
+        self._rec_hold_table = False
         self._auto_recover_t = -1e9
         self._recover_attempts = 0
         self.crouch = 0.0
@@ -567,7 +568,12 @@ class SkillSystem:
         if self.recovery_active:
             # Fall recovery owns the whole body (legs, spine, arms): it must
             # beat the posture spring, the gait hold and any gesture.
+            # Exception: while climbing furniture the arm servos own the arms
+            # (they pin the hands to the table); recovery takes legs+trunk.
+            hold = getattr(self, "_rec_hold_table", False)
             for nm, val in self.recovery_targets.items():
+                if hold and (nm.startswith("sh_") or nm.startswith("elbow_")):
+                    continue
                 i = self.motor_idx.get(nm)
                 if i is not None:
                     v[i] = val
@@ -1657,6 +1663,92 @@ class SkillSystem:
             self.recovery_targets = {}
 
     # ---- recovery helpers (closed loop on the live body) -----------------
+    def _rec_table_assist(self) -> bool:
+        """Climb the workbench leg hand-over-hand: plant both hands low on
+        the nearest corner leg, alternate reaching higher rungs while the
+        legs tuck-push below, and keep both hands anchored as support
+        through kneel and stand. An external anchor beats any floor move.
+        Returns True (hands stay anchored, ``_rec_hold_table`` set) or False.
+        """
+        ag = self.agent
+        sk = self
+        sk._rec_hold_table = False
+        try:
+            f = sk.world.furniture["table"]
+        except Exception:
+            return False
+        c = sk.world.body_pos()
+        # nearest bottom-corner leg of the table
+        cx = f["x"] + (f["hx"] - 0.03) * (1.0 if c[0] >= f["x"] else -1.0)
+        cy = f["y"] + (f["hy"] - 0.03) * (1.0 if c[1] >= f["y"] else -1.0)
+        gap = float(np.hypot(c[0] - cx, c[1] - cy))
+        inside = (abs(c[0] - f["x"]) < f["hx"] and abs(c[1] - f["y"]) < f["hy"])
+        if inside or gap > 0.55:
+            sk.events.append(f"stand_up: table leg {'under' if inside else 'too far'} "
+                             f"(gap {gap:.2f} m), floor routine")
+            return False
+        out = np.array([c[0] - cx, c[1] - cy, 0.0])
+        out /= max(np.linalg.norm(out), 1e-6)
+        rungs = [0.22, 0.42, 0.62]
+
+        def anchor(rung: int) -> np.ndarray:
+            return np.array([cx, cy, rungs[rung]]) + out * 0.035
+
+        for s in "lr":
+            h = sk.hands[s]
+            h.owned = True
+            h.target.update({"thumb": 0.8, "index": 0.8, "fingers": 0.8})
+            p = anchor(0).copy()
+            sk.arm[s].start(lambda p=p: (p, None), use_trunk=False, w_ori=0.0)
+        t0 = ag.t
+        while ag.t - t0 < 5.0:
+            if all(sk.arm[s].err_pos < 0.10 for s in "lr"):
+                break
+            yield
+        if any(sk.arm[s].err_pos > 0.18 for s in "lr"):
+            sk.events.append("stand_up: could not reach table leg")
+            for s in "lr":
+                sk.arm[s].stop()
+            return False
+        sk.events.append("stand_up: holding table leg, climbing")
+        sk._rec_set({"knee_l": 1.60, "knee_r": 1.60,
+                     "hip_l_flex": -1.00, "hip_r_flex": -1.00,
+                     "spine_bend": 0.20, "chest_bend": 0.10,
+                     "ankle_l_flex": 0.50, "ankle_r_flex": 0.50})
+        rung = {"l": 0, "r": 0}
+        turn = "l"
+        t1 = ag.t
+        while ag.t - t1 < 25.0:
+            if all(rung[s] >= 2 for s in "lr") and sk._rec_com() > 0.38:
+                break
+            s = turn
+            turn = "r" if s == "l" else "l"
+            if rung[s] >= 2:
+                yield
+                continue
+            rung[s] += 1
+            p = anchor(rung[s]).copy()
+            sk.arm[s].start(lambda p=p: (p, None), use_trunk=False, w_ori=0.0)
+            t2 = ag.t
+            while ag.t - t2 < 4.0:
+                if sk.arm[s].err_pos < 0.12:
+                    break
+                yield
+            if sk.arm[s].err_pos > 0.20:
+                rung[s] -= 1
+                p = anchor(rung[s]).copy()
+                sk.arm[s].start(lambda p=p: (p, None), use_trunk=False, w_ori=0.0)
+                sk.events.append(f"stand_up: {s} hand slipped back")
+            yield
+        ok = all(rung[s] >= 2 for s in "lr") and sk._rec_com() > 0.34
+        if not ok:
+            sk.events.append(f"stand_up: table climb slipped (COM {sk._rec_com():.2f} m)")
+            for s in "lr":
+                sk.arm[s].stop()
+            return False
+        sk._rec_hold_table = True
+        sk.events.append(f"stand_up: up the leg (COM {sk._rec_com():.2f} m), kneeling")
+        return True
     def _rec_table_assist(self) -> bool:
         """Climb up using the workbench: plant both hands on its top edge
         (arm servos pin them in world space = an external anchor) and drive
