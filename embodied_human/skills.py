@@ -395,6 +395,7 @@ class SkillSystem:
         self.events: list[str] = []
         self.heard: list[str] = []            # speech from outside, for the mind
         self.social_pulse = 0.0               # decaying social stimulus, feeds affect
+        self.touching = None                  # (region, side, action, phase) while self-touching
         self.gaze = None                      # None | ("point", xyz) | ("object", name)
         self.gaze_cur = np.zeros(4)           # neck yaw, neck pitch, eye yaw, eye pitch
         self.gesture_targets: dict[str, float] = {}
@@ -445,7 +446,9 @@ class SkillSystem:
         """While the jaw is driven kinematically its motor must not push against
         that: the reaction of a 45 N m actuator holding the jaw shut shoves the
         head and, through the neck, topples the body."""
-        if self.jaw_act >= 0 and (self.speech.speaking or self.speech.jaw > 1e-3):
+        beh = getattr(self.agent, "behavior", None)
+        driven = beh is not None and getattr(beh, "jaw_active", False)
+        if self.jaw_act >= 0 and (self.speech.speaking or self.speech.jaw > 1e-3 or driven):
             ctrl[self.jaw_act] = 0.0
 
     def update(self, dt: float) -> None:
@@ -652,12 +655,17 @@ class SkillSystem:
         w = self.world
         pt = self._gaze_point()
         if pt is None:
-            # idle: the eyes wander a little, the neck settles to neutral
-            self._idle_t -= TICK
-            if self._idle_t <= 0:
-                self._idle_gaze = self.rng.normal(0, 0.10, 2)
-                self._idle_t = float(self.rng.uniform(1.2, 3.5))
-            want = np.array([0.0, 0.0, self._idle_gaze[0], self._idle_gaze[1]])
+            # idle: the eyes wander a little, the neck settles to neutral -- unless
+            # the behaviour layer is directing them
+            beh = getattr(ag, "behavior", None)
+            if beh is not None and beh.enabled and getattr(beh, "eye_target", None) is not None:
+                want = np.array([0.0, 0.0, float(beh.eye_target[0]), float(beh.eye_target[1])])
+            else:
+                self._idle_t -= TICK
+                if self._idle_t <= 0:
+                    self._idle_gaze = self.rng.normal(0, 0.10, 2)
+                    self._idle_t = float(self.rng.uniform(1.2, 3.5))
+                want = np.array([0.0, 0.0, self._idle_gaze[0], self._idle_gaze[1]])
         else:
             # direction to the target in the chest frame
             R = d.xmat[w.chest].reshape(3, 3)
@@ -1385,6 +1393,80 @@ class SkillSystem:
         h.owned = False
 
     # ------------------------------------------------------------------
+    def _a_touch_self(self, region, hand, action):
+        """Bring a hand to a part of the person's own body and rest on it, rub it,
+        tap it or scratch it: the hand that goes to a dry eye, an itchy nose, a
+        cold upper arm."""
+        from .behavior_space import SELF_ACTIONS, SELF_REGIONS
+        table = {r[0]: r for r in SELF_REGIONS}
+        key = str(region).lower().replace(" ", "_")
+        if key not in table:
+            raise ActionFailed(f"I do not know a body part called '{region}' "
+                               f"(try {', '.join(table)})")
+        if action not in SELF_ACTIONS:
+            raise ActionFailed(f"unknown way of touching '{action}' (try {', '.join(SELF_ACTIONS)})")
+        name, body, local, _ = table[key]
+        h = str(hand).lower() if hand else ""
+        side = "l" if h in ("l", "left") else "r" if h in ("r", "right") else "r"
+        d = self.agent.data
+        ids = self.agent.meta.body_ids
+        loc = np.array(local, float)
+        base = body.rsplit("_", 1)[0] if body.endswith(("_l", "_r")) else body
+        if body.endswith(("_l", "_r")):
+            opposite = name in ("upper_arm", "forearm")
+            bside = ("r" if side == "l" else "l") if opposite else side
+            bname = f"{base}_{bside}"
+        else:
+            bname = body
+            if side == "r":
+                loc[0] = -loc[0]               # the anchors are given for the left side
+        bid = ids[bname]
+        arm = self.arm[side]
+        hs = self.hands[side]
+        self.touching = (name, side, action, "reach")
+
+        def anchor():
+            return d.xpos[bid] + d.xmat[bid].reshape(3, 3) @ loc
+        off = {"v": np.zeros(3)}
+        arm.start(self._arm_target_fn(side, lambda: anchor() + off["v"], None, None,
+                                      w_ori=0.0), use_trunk=name in ("thigh", "hip", "abdomen"),
+                  w_ori=0.0)
+        hs.owned = True
+        hs.freeze.clear()
+        hs.target.update(HAND_POSES["relaxed"] if action != "scratch" else HAND_POSES["pinch"])
+        t0 = self.agent.t
+        while arm.err_pos > 0.035 and self.agent.t - t0 < 4.5:
+            yield
+        self.touching = (name, side, action, "act")
+        R = d.xmat[bid].reshape(3, 3)
+        e1, e2 = R[:, 0], R[:, 2]
+        n = R[:, 1]
+        dur = {"rest": 1.6, "rub": 2.2, "tap": 1.6, "scratch": 2.4}[action]
+        t1 = self.agent.t
+        while self.agent.t - t1 < dur:
+            tt = self.agent.t - t1
+            if action == "rub":
+                off["v"] = 0.012 * (e1 * math.cos(2 * math.pi * 2.8 * tt) + e2 * math.sin(2 * math.pi * 2.8 * tt))
+            elif action == "tap":
+                off["v"] = -0.014 * n * max(0.0, math.sin(2 * math.pi * 3.5 * tt))
+            elif action == "scratch":
+                off["v"] = 0.009 * e2 * math.sin(2 * math.pi * 6.0 * tt) + 0.004 * e1 * math.sin(2 * math.pi * 3.0 * tt)
+            yield
+        off["v"] = np.zeros(3)
+        self.touching = (name, side, action, "retract")
+        if self.held[side] is None:
+            arm.begin_retract()
+            t2 = self.agent.t
+            while arm.active and self.agent.t - t2 < 3.0:
+                yield
+            if arm.active:
+                arm.stop()
+            hs.target.update(HAND_POSES["relaxed"])
+            for _ in range(int(0.4 / TICK)):
+                yield
+            hs.owned = False
+        self.touching = None
+
     def _a_crouch(self, depth):
         depth = float(np.clip(depth, 0.0, 1.0))
         if self.agent.gait.walking:
