@@ -1838,36 +1838,24 @@ class SkillSystem:
                 self._rec_caught = True
                 self.events.append("stand_up: table climb worked, kneeling")
             elif self._rec_caught:
-                # Caught roll onto folded knees: simple push-up to stand
-                # Arms take weight first, then knees extend
-                self.events.append("stand_up: push-up to stand")
-                # Phase 1: Arms take weight - straighten arms, lean forward
-                yield from self._rec_hold(
-                    {"knee_l": 1.50, "knee_r": 1.50,
-                     "hip_l_flex": -0.80, "hip_r_flex": -0.80,
-                     "ankle_l_flex": 0.20, "ankle_r_flex": 0.20,
-                     "spine_bend": 0.0, "chest_bend": 0.0,
-                     "sh_l_flex": -0.60, "sh_r_flex": -0.60,
-                     "elbow_l": 0.0, "elbow_r": 0.0},
-                    3.0, lambda: self._rec_com() > 0.30, "arms-support")
-                # Phase 2: Extend knees - arms hold weight, body rises
-                yield from self._rec_hold(
-                    {"knee_l": 1.00, "knee_r": 1.00,
-                     "hip_l_flex": -0.50, "hip_r_flex": -0.50,
-                     "ankle_l_flex": 0.10, "ankle_r_flex": 0.10,
-                     "spine_bend": 0.0, "chest_bend": 0.0,
-                     "sh_l_flex": -0.30, "sh_r_flex": -0.30,
-                     "elbow_l": 0.0, "elbow_r": 0.0},
-                    5.0, lambda: self._rec_com() > 0.45, "extend-knees")
-                # Phase 3: Full extension to standing
-                yield from self._rec_hold(
-                    {"knee_l": 0.10, "knee_r": 0.10,
-                     "hip_l_flex": 0.0, "hip_r_flex": 0.0,
-                     "ankle_l_flex": -0.05, "ankle_r_flex": -0.05,
-                     "spine_bend": 0.02, "chest_bend": 0.0,
-                     "sh_l_flex": 0.0, "sh_r_flex": 0.0,
-                     "elbow_l": -0.05, "elbow_r": -0.05},
-                    10.0, lambda: self._rec_com() > 0.72, "pushup-stand")
+                # Caught roll onto folded knees: crawl to table, then stand using table
+                self.events.append("stand_up: crawl to table")
+                # Crawl toward table using hand-walk until within reach
+                while self._rec_furniture_gap() > 0.45:
+                    self.events.append(f"stand_up: crawling to table (gap {self._rec_furniture_gap():.2f} m)")
+                    try:
+                        yield from self._rec_hand_walk()
+                    except ActionFailed:
+                        # Hand-walk failed, try rolling toward table
+                        self.events.append("stand_up: hand-walk failed, rolling toward table")
+                        yield from self._rec_roll()
+                    if self._rec_furniture_gap() <= 0.45:
+                        break
+                    yield
+                # At table: use table edge to stand up
+                self.events.append("stand_up: table-assisted stand")
+                yield from self._rec_table_assist()
+                self._rec_caught = True
             elif self._rec_pressed:
                 # Already handled by lunge press above
                 pass
