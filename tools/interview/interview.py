@@ -252,7 +252,10 @@ def generate_question(mind) -> tuple[str, str, str] | None:
     txt = mind.instance_log.path
     msgs = build_generator_messages(transcript_tail(txt), body_snapshot(mind))
     try:
-        model, content = ask_proxy(msgs)
+        # 2000, not 400: reasoning models (e.g. Nemotron) spend the first
+        # hundreds of tokens thinking; with a 400 cap the answer never fits
+        # and content comes back empty.  Quota is per-request, not per-token.
+        model, content = ask_proxy(msgs, max_tokens=2000)
     except QuotaDry as q:
         print(f"interview: quota dry, retry in {q.retry_after:.0f}s", flush=True)
         st = _state()
@@ -311,6 +314,9 @@ def run_forever(duration_s: float = 0.0, ask_first: bool = False) -> int:
     last_fail = 0.0
     try:
         while True:
+            if (STATE / "STOP").exists():
+                print("interview: STOP requested, exiting", flush=True)
+                break
             # pace the physics to roughly real time (cap steps per tick)
             target = time.time() - t_start
             for _ in range(5000):
@@ -318,7 +324,10 @@ def run_forever(duration_s: float = 0.0, ask_first: bool = False) -> int:
                     break
                 agent.step()
             st = _state()
-            if (ask_first and st["n_asked"] == 0) or due_now(st):
+            # Failed generations back off FAIL_RETRY_S instead of burning a
+            # proxy request every 5 s tick (each attempt counts toward quota).
+            if ((ask_first and st["n_asked"] == 0) or due_now(st)) \
+                    and time.time() - last_fail > FAIL_RETRY_S:
                 if ensure_proxy():
                     got = generate_question(mind)
                     st = _state()
@@ -329,7 +338,8 @@ def run_forever(duration_s: float = 0.0, ask_first: bool = False) -> int:
                                   last_model=model, last_question=q)
                         _save_state(st)
                         print(f"interview: asked [{model}]: {q}", flush=True)
-                    elif time.time() - last_fail > FAIL_RETRY_S:
+                        last_fail = 0.0
+                    else:
                         last_fail = time.time()
                 ask_first = False
             if duration_s and time.time() - t_start >= duration_s:
