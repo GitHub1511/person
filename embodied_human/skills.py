@@ -1836,13 +1836,26 @@ class SkillSystem:
             elif table_ok:
                 self._rec_caught = True
                 self.events.append("stand_up: table climb worked, kneeling")
-            if self._rec_caught:
-                if not table_ok:
-                    # Caught a big roll onto the folded knees: straight to kneel.
-                    self.events.append("stand_up: caught the roll, kneeling")
-                else:
-                    # Cobra succeeded but we're near table - use the table to stand.
-                    pass
+            elif self._rec_caught:
+                # Cobra succeeded: we're in an arched/extended pose. Extend knees
+                # to get feet under hips, then unroll to standing.
+                self.events.append("stand_up: cobra to stand")
+                yield from self._rec_hold(
+                    {"knee_l": 0.10, "knee_r": 0.10,
+                     "hip_l_flex": -0.05, "hip_r_flex": -0.05,
+                     "ankle_l_flex": -0.05, "ankle_r_flex": -0.05,
+                     "spine_bend": -0.20, "chest_bend": -0.10,
+                     "sh_l_flex": 0.15, "sh_r_flex": 0.15,
+                     "elbow_l": -0.10, "elbow_r": -0.10},
+                    4.0, lambda: self._rec_com() > 0.55, "cobra-stand-prep")
+                yield from self._rec_hold(
+                    {"knee_l": 0.10, "knee_r": 0.10,
+                     "hip_l_flex": 0.0, "hip_r_flex": 0.0,
+                     "ankle_l_flex": -0.05, "ankle_r_flex": -0.05,
+                     "spine_bend": 0.02, "chest_bend": 0.0,
+                     "sh_l_flex": 0.10, "sh_r_flex": 0.10,
+                     "elbow_l": -0.10, "elbow_r": -0.10},
+                    6.0, lambda: self._rec_com() > 0.72, "cobra-stand")
             elif self._rec_pressed:
                 # Already handled by lunge press above
                 pass
