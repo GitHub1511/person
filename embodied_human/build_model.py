@@ -214,6 +214,18 @@ def default_scene_objects(complexity=None) -> list[SceneObject]:
             temperature=23.0, odor=_odor((4, 0.5)), label="small ball",
         ),
     ]
+    if complexity is not None and getattr(complexity, 'stimuli', False):
+        objs.append(SceneObject(
+            name="odor_source", kind="sphere", pos=(1.0, 0.0, 0.5), size=(0.02,),
+            rgba=(1.0, 0.0, 1.0, 0.5), mass=0.01, temperature=20.0,
+            label="odor source",
+        ))
+        objs.append(SceneObject(
+            name="tastant_source", kind="sphere", pos=(-1.0, 0.0, 0.5), size=(0.02,),
+            rgba=(0.0, 1.0, 0.0, 0.5), mass=0.01, temperature=20.0,
+            label="tastant source",
+        ))
+    return objs
 
 
 # --------------------------------------------------------------------------
@@ -457,7 +469,7 @@ def build_xml(cfg: SimConfig, include_touch_sensors: bool = True) -> str:
             add(f'    <geom name="table_leg{suffix}{i}" class="env" type="box" '
                 f'pos="{fx + sx_ * (hx - 0.03):.3f} {fy + sy_ * (hy - 0.03):.3f} {leg_h:.3f}" '
                 f'size="0.02 0.02 {leg_h:.3f}" material="wall_mat"/>')
-    for obj in default_scene_objects():
+    for obj in default_scene_objects(complexity=cfg.complexity if hasattr(cfg, 'complexity') else None):
         add('    ' + obj.xml())
     add('    <camera name="observer" pos="1.9 -2.5 1.75" '
         'xyaxes="0.79 0.61 0 -0.24 0.31 0.92" fovy="48"/>')
@@ -486,7 +498,7 @@ def build_xml(cfg: SimConfig, include_touch_sensors: bool = True) -> str:
     # is the one deliberate shortcut in the manipulation stack, and the README
     # says so.
     add('  <equality>')
-    for obj in default_scene_objects():
+    for obj in default_scene_objects(complexity=cfg.complexity if hasattr(cfg, 'complexity') else None):
         for s in ("l", "r"):
             add(f'    <weld name="grip_{s}_{obj.name}" body1="hand_{s}" '
                 f'body2="{obj.name}_body" active="false" solref="0.025 1" '
@@ -539,7 +551,7 @@ def build_xml(cfg: SimConfig, include_touch_sensors: bool = True) -> str:
     for b in BONES:
         for j in b.joints:
             qpos.append(nominal.get(j.name, 0.0))
-    for obj in default_scene_objects():
+    for obj in default_scene_objects(complexity=cfg.complexity if hasattr(cfg, 'complexity') else None):
         qpos.extend(obj.qpos().tolist())
     add('  <keyframe>')
     add(f'    <key name="standing" qpos="{_f(qpos)}"/>')
@@ -695,7 +707,7 @@ def load_model(cfg: SimConfig, include_touch_sensors: bool = True,
     root_jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "root")
     if root_jid < 0:
         raise RuntimeError("root free joint not found")
-    objects = default_scene_objects()
+    objects = default_scene_objects(complexity=cfg.complexity if hasattr(cfg, 'complexity') else None)
     object_qpos_addr = {}
     for obj in objects:
         jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"{obj.name}_joint")

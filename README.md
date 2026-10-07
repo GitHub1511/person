@@ -2,27 +2,40 @@
 
 A simulated person, not a policy.
 
-This is a 52-actuated-DoF humanoid in MuJoCo with **49,588 continuously
-computed sensory scalars**, a **67-variable interoceptive system**, **28
-emotion channels**, **25 neuromodulators**, **16 homeostatic drives**, and a
-predictive-coding brain that learns its own body schema and chooses actions by
-minimising expected free energy against the setpoints those drives supply.
+This is a 52-actuated-DoF humanoid in MuJoCo whose inside is meant to be
+rich: dense skin, populations of sensory cells, eyes that dry out and blink,
+organ systems, a circadian clock, a neural mass, episodic memory, 28 emotions,
+25 neuromodulators, 21 drives, a predictive-coding brain that learns its own
+body schema, and a generative behaviour space of ~10^37 describable behaviours.
+It chooses what to do by minimising expected free energy against setpoints
+that its own body supplies.
 
 There is no task and no external reward. Everything the agent wants is
 generated from inside its own body.
 
-> **Newer additions (§16):** whole-body control, a (partly working) bipedal
-> gait, arms/hands that reach, grasp and hold, a talking jaw with speech and
-> thought bubbles, and a hook for the Absolute Zero Reasoner model as the
-> person's "mind" (`python run_mind.py`).  §16 says plainly what is verified
-> and what is not: AZR itself has not been run, and walking is unreliable.
+## What this repository contains, and how far each part is verified
+
+| part | where | status |
+|---|---|---|
+| The base person: 1,872 taxels, 49,588 sensory scalars, 67 interoceptive variables, affect, drives, active inference (§2-§11) | `base` complexity | **measured** (reference run in §11); not re-run end to end since §17 was added |
+| Whole-body control, walking, hands, speech, thought bubbles (§16) | `wbc.py`, `locomotion.py`, `skills.py`, `speech.py` | standing and grasping work in scripted tests; **walking is unreliable** |
+| The "mind" hook for the Absolute Zero Reasoner (§16.5) | `mind.py`, `run_mind.py` | prompt/parse/dispatch tested against a fake server; **AZR itself has never been run** |
+| Scalable complexity: skin density, sensory-cell populations, eyes, inner world (§17) | `complexity.py`, `senses_ext.py`, `ocular.py`, `inner_*.py` | built and unit-exercised; **sizes and speed at `rich`/`extreme` are not yet measured** (`tools/scale_complexity.py --measure` has not been completed) |
+| Generative behaviour space + learned body safety (§17.5-§17.6) | `behavior_*.py`, `body_learning.py`, `tools/train_body.py` | trained and evaluated at `base`: falls per sim-hour 307 -> 87 (§17.6); still falls |
+| Unattended planner + coder loop on free OpenRouter models (§18) | `tools/openrouter_helper/` | offline tests pass; live runs in progress; **its output is unreviewed machine-written code** |
 
 ```bash
 python -m pip install mujoco numpy matplotlib
 python run_sim.py                    # 10 s episode + all figures
 python run_sim.py --describe         # print the whole vector space and exit
 python run_sim.py --duration 20 --render
+PERSON_COMPLEXITY=base python run_sim.py     # the original body (§2-§11 numbers)
 ```
+
+**Complexity default.**  The default level is now `extreme` (§17.1), so the
+numbers quoted in §2-§11 (49,588 sensory scalars, 67 interoceptive variables,
+~3 ms per step) describe the **`base`** level.  Use `PERSON_COMPLEXITY=base` to
+reproduce them.
 
 Outputs land in `out/`: a compressed `.npz` of every layer, CSVs, a JSON
 manifest, six figures, and rendered frames.
@@ -467,7 +480,23 @@ embodied_human/
   agent.py          the multi-rate loop and the latent/preferred space
   record.py         episode recording
   plots.py          figures
+  complexity.py     the complexity presets (base / rich / extreme / max), read once at import
+  senses_ext.py     populations of sensory cells (spindles, hair cells, olfactory, taste, retina)
+  ocular.py         tear film, dryness, blink CPG, lids, corneal nerves; EyeRig (visible eyes)
+  inner_organs.py   vascular beds, lungs, kidney, liver, gut + microbiome, motor units, skin thermo, immune, chemistry
+  inner_brain.py    circadian clock, neural mass, episodic memory, conditioning, interoceptive prediction
+  inner_world.py    runs the above at their own rates and couples them to affect, drives, skin, behaviour
+  behavior_space.py the generative behaviour space (33 channels, mixed-radix encode/decode, affinity tags)
+  behavior_exec.py  selector (expected free energy over sampled descriptors) and 50 Hz executor
+  body_learning.py  BodySafety: learned model of which behaviours unbalance the body
+  body_safety.json  the trained weights (loaded by every new person)
 run_sim.py          CLI
+run_mind.py         the person with a language-model mind (§16.5)
+tools/
+  scale_complexity.py   list / measure / set the complexity level
+  train_body.py         parallel babbling + fitting of BodySafety
+  autopush.py           commit (and push) whenever a file is saved
+  openrouter_helper/    the planner + coder loop (§18)
 ```
 
 Diagnostic scripts (`diag_*.py`) are the experiments that produced §9; each
@@ -517,6 +546,9 @@ one is runnable and reports the measurement it was written for.
 * Everything in §16 (skills, hands, the mind) is *newer and less measured*
   than the sensory/affective machinery above; its limitations are listed in
   §16.6.
+* Everything in §17 (complexity, eyes, inner world, behaviour space) was
+  added later still; limitations are in §17.7.  §18 is code that edits this
+  repository by itself and has not been reviewed by a person.
 
 ---
 
