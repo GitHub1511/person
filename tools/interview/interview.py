@@ -233,8 +233,12 @@ def body_snapshot(mind) -> str:
             f"emotion: {ctx.get('emotion')}",
             f"urgent drives: {ctx.get('urgent') or 'none'}"]
     heard = ctx.get("heard") or []
+
+    def _ht(h):
+        return h.get("text", "") if isinstance(h, dict) else str(h)
+
     if heard:
-        bits.append("recently heard: " + "; ".join(f'"{h}"' for h in heard[-2:]))
+        bits.append("recently heard: " + "; ".join(f'"{_ht(h)}"' for h in heard[-2:]))
     return "; ".join(bits)
 
 
