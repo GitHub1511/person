@@ -34,8 +34,10 @@ def peak_rss_mb() -> float:
                         ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
                         ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
         c = PMC(); c.cb = ctypes.sizeof(PMC)
-        ctypes.windll.psapi.GetProcessMemoryInfo(ctypes.windll.kernel32.GetCurrentProcess(),
-                                                 ctypes.byref(c), c.cb)
+        k32, ps = ctypes.WinDLL("kernel32"), ctypes.WinDLL("psapi")
+        k32.GetCurrentProcess.restype = ctypes.c_void_p
+        ps.GetProcessMemoryInfo.argtypes = [ctypes.c_void_p, ctypes.POINTER(PMC), ctypes.c_ulong]
+        ps.GetProcessMemoryInfo(k32.GetCurrentProcess(), ctypes.byref(c), c.cb)
         return c.PeakWorkingSetSize / 1e6
     try:
         import resource
