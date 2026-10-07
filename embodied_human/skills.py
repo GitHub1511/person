@@ -1651,23 +1651,43 @@ class SkillSystem:
     def _rec_cobra(self):
         ag = self.agent
         t0 = ag.t
-        while ag.t - t0 < 9.0:
-            if self._rec_com() > 0.30:
+        prev = self._rec_com()
+        tucked = False
+        while ag.t - t0 < 12.0:
+            com = self._rec_com()
+            if com > 0.40:
                 self.events.append("stand_up: cobra up")
                 return
-            u = min((ag.t - t0) / 8.0, 1.0)
-            push = max(0.0, float(np.sin(2 * np.pi * 0.6 * (ag.t - t0))))
-            arch = -0.05 - 0.27 * push
-            knee = 0.15 + 1.65 * u
-            hip = 0.15 - 1.05 * u
-            self._rec_set({
-                "spine_bend": arch, "chest_bend": 0.7 * arch,
-                "elbow_l": -0.05, "elbow_r": -0.05,
-                "sh_l_flex": 0.10, "sh_r_flex": 0.10,
-                "hip_l_flex": hip, "hip_r_flex": hip,
-                "knee_l": knee, "knee_r": knee,
-                "ankle_l_flex": 0.30, "ankle_r_flex": 0.30})
+            vel = (com - prev) / max(TICK, 1e-6)
+            prev = com
+            if not tucked and com > 0.21 and vel > 0.05:
+                tucked = True  # rocking up: knees are unloaded, snatch them under
+            if tucked and com < 0.16:
+                tucked = False  # missed it: rock again
+            if tucked:
+                self._rec_set({
+                    "spine_bend": -0.15, "chest_bend": -0.10,
+                    "elbow_l": -0.05, "elbow_r": -0.05,
+                    "sh_l_flex": 0.10, "sh_r_flex": 0.10,
+                    "hip_l_flex": -1.10, "hip_r_flex": -1.10,
+                    "knee_l": 1.90, "knee_r": 1.90})
+            else:
+                u = min((ag.t - t0) / 8.0, 1.0)
+                push = max(0.0, float(np.sin(2 * np.pi * 0.6 * (ag.t - t0))))
+                arch = -0.05 - 0.27 * push
+                knee = 0.15 + 1.65 * u
+                hip = 0.15 - 1.05 * u
+                self._rec_set({
+                    "spine_bend": arch, "chest_bend": 0.7 * arch,
+                    "elbow_l": -0.05, "elbow_r": -0.05,
+                    "sh_l_flex": 0.10, "sh_r_flex": 0.10,
+                    "hip_l_flex": hip, "hip_r_flex": hip,
+                    "knee_l": knee, "knee_r": knee,
+                    "ankle_l_flex": 0.30, "ankle_r_flex": 0.30})
             yield
+        if self._rec_com() > 0.30:
+            self.events.append("stand_up: cobra up")
+            return
         if self._rec_com() > 0.24:
             self.events.append("stand_up: cobra partial, continuing")
             return
