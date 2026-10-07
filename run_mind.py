@@ -50,7 +50,8 @@ def make_backend(a):
 
 
 def build_agent(a) -> EmbodiedHuman:
-    cfg = SimConfig(seed=a.seed, out_dir=Path(a.out))
+    cfg = SimConfig(seed=a.seed, out_dir=Path(a.out),
+                    instance_id=getattr(a, "instance_id", "") or "")
     # the live app does not need the sensory stack at its full rates; the
     # reflexes that depend on them (withdrawal, startle) are slower than this
     cfg.rates.receptor = 100.0
@@ -99,13 +100,19 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--frame-every", type=float, default=1.0)
     p.add_argument("--at-table", action="store_true",
                    help="start standing at the workbench instead of in the middle of the room")
+    p.add_argument("--instance-id", default="",
+                   help="identifier for this simulation instance (fresh one minted if empty); "
+                        "every thought/action is appended to instances/<id>.txt under --out")
     return p
 
 
 def run(a) -> int:
     agent = build_agent(a)
     backend = make_backend(a)
-    mind = Mind(agent, backend, log=print if a.headless else None)
+    mind = Mind(agent, backend, log=print if a.headless else None,
+                instance_id=agent.instance_id)
+    print(f"instance {agent.instance_id}: transcript at "
+          f"{mind.instance_log.path}")
 
     if a.headless > 0:
         return headless(a, agent, mind)
