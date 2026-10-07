@@ -1602,13 +1602,24 @@ class SkillSystem:
                      "spine_bend": 0.0, "chest_bend": 0.0},
                     3.0, lambda: self._rec_com() > 0.25, "hand-plant",
                     proceed=lambda: True)
-                # Press: extend the elbows, arch slightly, chest rises.
+                # Press from the knees (half the load, short lever): first tuck
+                # the knees under while the hands STAY planted, then extend.
+                yield from self._rec_hold(
+                    {"knee_l": 1.80, "knee_r": 1.80,
+                     "hip_l_flex": -0.90, "hip_r_flex": -0.90,
+                     "elbow_l": -1.30, "elbow_r": -1.30,
+                     "sh_l_flex": 0.15, "sh_r_flex": 0.15,
+                     "ankle_l_flex": 0.30, "ankle_r_flex": 0.30},
+                    4.0, lambda: self._rec_knee() > 1.40, "knees-tuck",
+                    proceed=lambda: True)
+                # Press: extend the elbows, toes dug, chest rises to all-fours.
                 yield from self._rec_hold(
                     {"elbow_l": -0.05, "elbow_r": -0.05,
                      "sh_l_flex": 0.10, "sh_r_flex": 0.10,
                      "spine_bend": -0.10, "chest_bend": -0.05,
-                     "hip_l_flex": -0.10, "hip_r_flex": -0.10,
-                     "knee_l": 0.20, "knee_r": 0.20},
+                     "hip_l_flex": -0.90, "hip_r_flex": -0.90,
+                     "knee_l": 1.80, "knee_r": 1.80,
+                     "ankle_l_flex": 0.30, "ankle_r_flex": 0.30},
                     4.0, lambda: self._rec_com() > 0.35, "press",
                     proceed=lambda: self._rec_com() > 0.28)
             # Knees under: from a raised chest, drag the knees forward under
@@ -1672,6 +1683,13 @@ class SkillSystem:
     def _rec_com(self) -> float:
         st = self.agent.state
         return float(st.com[2]) if st is not None else 0.0
+
+    def _rec_knee(self) -> float:
+        try:
+            st = self.agent.state
+            return float((st.qof("knee_l") + st.qof("knee_r")) * 0.5)
+        except Exception:
+            return 0.0
 
     def _rec_chest_up_z(self) -> float:
         try:
