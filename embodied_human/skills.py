@@ -1638,7 +1638,7 @@ class SkillSystem:
                      "spine_bend": 0.05, "chest_bend": 0.0,
                      "sh_l_flex": 0.20, "sh_r_flex": 0.20,
                      "elbow_l": -0.40, "elbow_r": -0.40},
-                    6.0, lambda: self._rec_com() > 0.70, "lunge-press")
+                    6.0, lambda: self._rec_com() > 0.60, "lunge-press")
                 self._rec_pressed = True
                 self.events.append("stand_up: pressed up from lunge")
                 self._rec_pressed = True
@@ -2172,17 +2172,17 @@ class SkillSystem:
             if face < -0.50 or com > 0.35:
                 self.events.append("stand_up: rolled prone")
                 return
-            if tucked and com > 0.42:
+            if tucked and com > 0.38:
                 # caught a big rock onto the folded knees: skip ahead
                 self._rec_caught = True
                 self.events.append("stand_up: caught roll onto knees")
                 return
-            if lunged and com > 0.48:
+            if lunged and com > 0.42:
                 # lunge landed: front leg takes weight, press to stand
                 self._rec_lunged = True
                 self.events.append("stand_up: lunged, pressing up")
                 return
-            if not lunged and not tucked and com > 0.34 and vel > 0.03:
+            if not lunged and not tucked and com > 0.30 and vel > 0.03:
                 # LUNGE catch: throw one leg forward into a lunge at the
                 # rock peak — lands ~0.5, then the front quad presses.
                 lunged = True
