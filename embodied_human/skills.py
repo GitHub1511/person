@@ -1588,17 +1588,17 @@ class SkillSystem:
                  "elbow_l": -1.00, "elbow_r": -1.00},
                 0.1, lambda: False, "curl", proceed=lambda: True)
             yield from self._rec_roll()
-            # Fold onto the knees with the strong hip/knee motors (the weak
-            # shoulders cannot push-up 70 kg): feet press behind, torso rides
-            # up and back onto the knees.
+            # Fold onto the knees with the strong hip/knee motors while the
+            # arms STAY planted forward holding the chest up (releasing them
+            # collapses the torso flat): feet press behind, knees drag under.
             yield from self._rec_hold(
                 {"knee_l": 2.20, "knee_r": 2.20,
-                 "hip_l_flex": -1.50, "hip_r_flex": -1.50,
-                 "spine_bend": 0.40, "chest_bend": 0.25,
-                 "sh_l_flex": -0.40, "sh_r_flex": -0.40,
-                 "elbow_l": -0.50, "elbow_r": -0.50},
+                 "hip_l_flex": -1.40, "hip_r_flex": -1.40,
+                 "spine_bend": 0.35, "chest_bend": 0.20,
+                 "sh_l_flex": 0.80, "sh_r_flex": 0.80,
+                 "elbow_l": -0.40, "elbow_r": -0.40},
                 6.0, lambda: self._rec_com() > 0.40, "fold",
-                proceed=lambda: self._rec_com() > 0.32)
+                proceed=lambda: self._rec_com() > 0.30)
             yield from self._rec_hold(
                 {"knee_l": 1.80, "knee_r": 1.80,
                  "hip_l_flex": -1.20, "hip_r_flex": -1.20,
