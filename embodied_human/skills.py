@@ -1607,21 +1607,20 @@ class SkillSystem:
                 # it (~0.6 Hz, like pushing a swing) while ratcheting the
                 # knees under; each bounce starts a little higher.
                 yield from self._rec_cobra()
-            # Knees under: from a raised chest, drag the knees forward under
-            # the hips (gravity helps now) into all-fours/kneel.
-            yield from self._rec_hold(
-                {"knee_l": 2.00, "knee_r": 2.00,
-                 "hip_l_flex": -1.20, "hip_r_flex": -1.20,
-                 "spine_bend": 0.30, "chest_bend": 0.15,
-                 "sh_l_flex": 0.60, "sh_r_flex": 0.60,
-                 "elbow_l": -0.30, "elbow_r": -0.30},
-                5.0, lambda: self._rec_com() > 0.48, "knees-under")
-            yield from self._rec_hold(
-                {"knee_l": 1.80, "knee_r": 1.80,
-                 "hip_l_flex": -1.20, "hip_r_flex": -1.20,
-                 "spine_bend": 0.30, "chest_bend": 0.15,
-                 "sh_l_flex": 0.70, "sh_r_flex": 0.70},
-                5.0, lambda: self._rec_com() > 0.48, "tuck")
+            if self._rec_caught:
+                # Tucked at the rock peak and still high: knees are already
+                # under, go straight to tall kneel without re-blending.
+                self.events.append("stand_up: caught the peak, kneeling")
+            else:
+                # Knees under: from a raised chest, drag the knees forward under
+                # the hips (gravity helps now) into all-fours/kneel.
+                yield from self._rec_hold(
+                    {"knee_l": 2.00, "knee_r": 2.00,
+                     "hip_l_flex": -1.20, "hip_r_flex": -1.20,
+                     "spine_bend": 0.30, "chest_bend": 0.15,
+                     "sh_l_flex": 0.60, "sh_r_flex": 0.60,
+                     "elbow_l": -0.30, "elbow_r": -0.30},
+                    5.0, lambda: self._rec_com() > 0.42, "knees-under")
             yield from self._rec_hold(
                 {"knee_l": 1.70, "knee_r": 1.70,
                  "hip_l_flex": -1.00, "hip_r_flex": -1.00,
