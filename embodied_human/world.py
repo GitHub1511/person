@@ -35,8 +35,9 @@ class World:
     ODORANT_EMISSION = 0.02
     TASTANT_EMISSION = 0.01
 
-    def __init__(self, agent):
+    def __init__(self, agent, complexity=None):
         self.agent = agent
+        self.complexity = complexity
         self.m = agent.model
         self.meta = agent.meta
         self.objects = {o.name: o for o in self.meta.objects}
@@ -46,6 +47,23 @@ class World:
         self.pelvis = self.meta.body_ids["pelvis"]
         self.head = self.meta.body_ids["head"]
         self.chest = self.meta.body_ids["chest"]
+        self.stimuli = None
+        self._setup_stimuli()
+
+    def _setup_stimuli(self):
+        if self.complexity is not None and getattr(self.complexity, 'stimuli', False):
+            from . import stimuli
+            self.stimuli = stimuli.default_stimuli()
+
+    def get_odorant_at(self, point) -> float:
+        if self.stimuli is not None:
+            return self.stimuli.get_odorant_at(point)
+        return 0.0
+
+    def get_tastant_at(self, point) -> float:
+        if self.stimuli is not None:
+            return self.stimuli.get_tastant_at(point)
+        return 0.0
 
     # ------------------------------------------------------------------
     @property

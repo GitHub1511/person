@@ -1065,12 +1065,25 @@ class ChemoSystem:
         self._seen = np.zeros(self.n_olf)
         self.tongue_site = meta.landmark_site_ids.get("gaze")
 
-    def sense(self, model, data, meta, state: BodyState) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        nose = state.site_pos.get("gaze", state.gaze_pos)
-        odor = np.zeros(self.n_olf)
-        taste = np.zeros(5)
-        tongue_hit = 0.0
-        for obj in self.objects:
+    def sense(self, model, data, meta, state: BodyState, world=None, nose_pos=None, mouth_pos=None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        if nose_pos is None:
+            nose_pos = state.site_pos.get("gaze", state.gaze_pos) if hasattr(state, 'site_pos') else state.gaze_pos
+        if mouth_pos is None:
+            mouth_pos = state.site_pos.get("mouth", state.gaze_pos) if hasattr(state, 'site_pos') else state.gaze_pos
+        odorant = world.get_odorant_at(nose_pos) if world is not None else 0.0
+        tastant = world.get_tastant_at(mouth_pos) if world is not None else 0.0
+        # Add external chemical signals to receptor state (world-controlled)
+        self.odor_conc[:] = odorant * np.ones(self.n_olf, dtype=np.float64)
+        taste = np.full(5, tastant, dtype=np.float64)
+        tongue_hit = 1.0 if tastant > 0.0 else 0.0
+        summary = np.array([
+            float(self.odor_conc.sum()),
+            float(abs(odorant - self.prev_odor.sum() / max(self.n_olf, 1)) * self.n_olf),
+            float(np.dot(self.odor_conc, np.linspace(-1, 1, self.n_olf))),
+            float(np.linalg.norm(state.com_vel)) * 0.1 + 0.2,
+        ])
+        self.prev_odor = self.odor_conc.copy()
+        return self.odor_conc.copy(), taste, summary
             jid = meta.object_qpos_addr.get(obj.name)
             if jid is None:
                 continue
@@ -1164,7 +1177,7 @@ class ReceptorSystem:
         mouth_pos = world_mouth_pos if world_mouth_pos is not None else (
             state.site_pos.get("mouth", state.gaze_pos) if hasattr(state, 'site_pos') else np.zeros(3))
 
-        olf, gus, chemo_sum = self.chemo.sense(model, data, meta, state)
+        olf, gus, chemo_sum = self.chemo.sense(model, data, meta, state, world=world, nose_pos=world_nose_pos, mouth_pos=world_mouth_pos)
         # override with world emission if present
         if world is not None:
             olf[:] = world.get_odorant_concentration(nose_pos) * np.ones_like(olf)
