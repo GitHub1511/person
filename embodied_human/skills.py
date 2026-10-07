@@ -1602,16 +1602,6 @@ class SkillSystem:
                      "spine_bend": 0.0, "chest_bend": 0.0},
                     3.0, lambda: self._rec_com() > 0.25, "hand-plant",
                     proceed=lambda: True)
-                # Press from the knees (half the load, short lever): first tuck
-                # the knees under while the hands STAY planted, then extend.
-                yield from self._rec_hold(
-                    {"knee_l": 1.80, "knee_r": 1.80,
-                     "hip_l_flex": -0.90, "hip_r_flex": -0.90,
-                     "elbow_l": -1.30, "elbow_r": -1.30,
-                     "sh_l_flex": 0.15, "sh_r_flex": 0.15,
-                     "ankle_l_flex": 0.30, "ankle_r_flex": 0.30},
-                    4.0, lambda: self._rec_knee() > 1.40, "knees-tuck",
-                    proceed=lambda: True)
                 # Cobra: arch the strong back extensors to lift the chest while
                 # the pelvis stays pinned (prone legs give no leverage, so the
                 # back — not the arms — does the lifting).
