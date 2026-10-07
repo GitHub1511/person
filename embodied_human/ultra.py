@@ -364,6 +364,8 @@ class UltraWorld:
         for name, cls in sorted(REGISTRY.items(), key=lambda kv: (kv[1].domain, kv[0])):
             if only and name not in only:
                 continue
+            if cls.domain == "example" and not only:        # the template, not part of a person
+                continue
             if name in exclude or not self.level.at_least(cls.min_level):
                 continue
             sub_seed = self.seed * 1_000_003 + zlib.crc32(name.encode())

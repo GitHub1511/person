@@ -17,3 +17,6 @@ tools/openrouter_helper/pi/
 *.env
 .env
 
+
+# ultra tier / workers
+.simlock/
