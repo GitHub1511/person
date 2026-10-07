@@ -2120,8 +2120,9 @@ class SkillSystem:
         cx = f["x"] + (f["hx"] - 0.03) * (1.0 if c[0] >= f["x"] else -1.0)
         cy = f["y"] + (f["hy"] - 0.03) * (1.0 if c[1] >= f["y"] else -1.0)
         gap = float(np.hypot(c[0] - cx, c[1] - cy))
-        inside = (abs(c[0] - f["x"]) < f["hx"] and abs(c[1] - f["y"]) < f["hy"])
-        if inside or gap > 0.85:
+        # Allow table assist from front (remove inside check which fails when body is under table)
+        # The body approaches table front-on (x=0), so we need to reach the front legs at x=±0.43
+        if gap > 0.85:
             sk.events.append(f"stand_up: table leg {'under' if inside else 'too far'} "
                              f"(gap {gap:.2f} m), floor routine")
             return False
