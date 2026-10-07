@@ -621,6 +621,7 @@ mind, §16.5), `setup_azr.py` (how to obtain AZR), `smoke.py` (build and short r
 | `tools/readme_combinatorics.py` | 111 | Compute the combinatorial quantities quoted in the README from the code itself. |
 | `tools/readme_describe.py` | 31 | Dump agent.describe() (and a few extra counts) for the current PERSON_COMPLEXITY to JSON. |
 | `tools/readme_runtime_facts.py` | 59 | Inventory of what the running person is made of (array sizes per subsystem), for the README. |
+| `tools/readme_verify.py` | 130 | Cross-check the numbers quoted in README.md against freshly computed or recorded values. |
 | `tools/scale_complexity.py` | 188 | Set, inspect and measure how complicated the person is. |
 | `tools/simlock.py` | 120 | Run a heavy command only when the machine can afford it. |
 | `tools/train_body.py` | 303 | Learn, from many bodies at once, which behaviours are safe to perform. |
@@ -742,7 +743,7 @@ Zero Reasoner: Zhao et al. (2025), "Absolute Zero: Reinforced Self-play Reasonin
 This part was added on top of the body of §2–§11. It is presented in terms of what was *measured*, because
 several components are demonstrations rather than solved problems.
 
-### 16.1 Whole-body control (`wbc.py`, 352 lines)
+### 16.1 Whole-body control (`wbc.py`)
 
 Standing is controlled by inverse dynamics instead of the equilibrium-point spring. Every 4 ms (250 Hz) the
 whole-body controller (WBC) solves one least-squares problem for the 88 generalised accelerations and the
@@ -752,12 +753,12 @@ unilateral contacts, a centre-of-pressure box inside each foot, a friction cone 
 limit. Violated inequality constraints are handled with an active set (pins). Joint torques are clipped to the
 limits of §2.1. The eyes, jaw and fingers remain under their own controllers.
 
-### 16.2 Bipedal walking (`locomotion.py`, 741 lines)
+### 16.2 Bipedal walking (`locomotion.py`)
 
 A divergent-component-of-motion (capture-point) planner places each foot, with `beta_step` (1.06) scaling the
 aggressiveness of the placement; the gait states are `stand → init → unload → single support ↔ double support →
 settle → stand`. Step length is integrated to meet the commanded speed, swing feet follow minimum-jerk paths
-and the heading is drawn towards the commanded heading. The gait dataclasses hold 46 float parameters, of which
+and the heading is drawn towards the commanded heading. `GaitParams` holds 41 float parameters, of which
 about 25 were tuned by random search (parallel, eight rounds, 224 candidates).
 
 **Measured result: partly functional.**
@@ -773,9 +774,9 @@ about 25 were tuned by random search (parallel, eight rounds, 224 candidates).
   few steps, and the skill layer will fall if asked to walk further. `walk_to` inherits this unreliability.
 * The tuning was performed with the table moved out of the way; a long walk past furniture was not tested.
 
-### 16.3 Arms, hands, grasping and holding (`skills.py`, 2,635 lines, 131 functions)
+### 16.3 Arms, hands, grasping and holding (`skills.py`)
 
-`SkillSystem` has 89 methods, 36 of them public (the `api_*` calls of §16.5 and a few state accessors).
+`skills.py` has 131 functions; `SkillSystem` has 89 methods, 36 of them public (the `api_*` calls of §16.5 and a few state accessors).
 
 * **Arm inverse kinematics (IK)** is analytic: the law of cosines for the shoulder–elbow–wrist chain (upper arm
   0.255 m, forearm 0.23 m, reach `ARM_REACH` = 0.54 m), a search over the swivel angle within the joint limits,
@@ -797,16 +798,16 @@ about 25 were tuned by random search (parallel, eight rounds, 224 candidates).
   standing at the table. The stone (0.9 kg, wide) could not be gripped, and one mug put-down ended with the mug
   on the floor; the procedure is fragile.
 
-### 16.4 Speech and thoughts (`speech.py`, 177 lines; `viewer.py`)
+### 16.4 Speech and thoughts (`speech.py`, `viewer.py`)
 
-Speech opens and closes the jaw with a syllable-timed envelope (50 Hz, no fine mouth shape). The spoken
+Speech opens and closes the jaw with a syllable-timed envelope (updated on the 50 Hz skill tick, no fine mouth shape). The spoken
 content appears in a white bubble above the head and the thoughts appear above the head in grey italics. It can
 optionally be rendered aloud through the Windows Speech API (`--voice`). Heard speech is delayed by the
 distance at the speed of sound (343 m/s). There is **no built-in drive to speak**; the person speaks only if the
 mind decides to. The jaw is moved kinematically and its actuator is muted while speaking (an earlier version let
 the actuator oppose the override and the reaction torque knocked the body over).
 
-### 16.5 The mind (`mind.py`, 996 lines; `world.py`; `run_mind.py`)
+### 16.5 The mind (`mind.py`, `world.py`, `run_mind.py`)
 
 The body exposes an application programming interface (API) of **26 call names** (24 distinct skills; `pick_up`
 and `grab` are aliases, `nothing` is a no-op): `say, look_at, look_forward, hand_pose, wait, walk_to, walk, turn,
@@ -842,7 +843,7 @@ python diag_azr_live.py        # one real thought, dispatched into the skill sys
 python diag_azr_balance.py     # cycles of prompt -> gate -> step -> verify; exit 0 iff no falls
 ```
 
-**The control loop (`azr_loop.py`, 164 lines): reasoning proposes, physics disposes.** AZR is a code-reasoning
+**The control loop (`azr_loop.py`): reasoning proposes, physics disposes.** AZR is a code-reasoning
 model, not a balance controller, and never drives torques. Every proposed call passes three stages:
 
 1. *Assess* (`assess`): the live body state decides whether the call is allowed, rewritten or denied, and a
@@ -982,7 +983,7 @@ level).
 * `senses_ext.py` adds the cell populations of §3.3: 439 / 3,032 / 6,400 / 12,784 non-visual values per frame at
   `base` / `rich` / `extreme` / `max`, plus the retina bank (12,096 to 86,016 values).
 
-### 17.3 Eyes that dry and blink (`ocular.py`, 429 lines)
+### 17.3 Eyes that dry and blink (`ocular.py`)
 
 Each eye has a tear film that thins and evaporates (96 film sectors per eye at `extreme`, 16 at `base`), a
 meniscus reservoir fed by the lacrimal gland, lipid and mucin layers, and a population of corneal nerve
