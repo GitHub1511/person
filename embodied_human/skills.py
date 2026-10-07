@@ -1730,6 +1730,7 @@ class SkillSystem:
             sk._rec_servo_hand(s, sk._rec_hand_home(s))
         t0 = ag.t
         step_side = "l"
+        ok = False
 
         def coord() -> None:
             # Coordinate the press with the fold: as the spine jackknifes,
