@@ -56,7 +56,7 @@ class RateConfig:
 
     physics: float = 1000.0
     receptor: float = COMPLEXITY.tactile_hz   # dense skin is transduced more slowly
-    afferent: float = 200.0
+    afferent: float = min(200.0, 2.0 * COMPLEXITY.tactile_hz)
     interoception: float = 100.0
     affect: float = 50.0
     cognition: float = 10.0

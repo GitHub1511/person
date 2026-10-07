@@ -154,6 +154,8 @@ class AfferentSystem:
         self.reafference_r2 = 0.0
         self._reaff_buffer: deque = deque(maxlen=400)
         self.rng = np.random.default_rng(cfg.seed + 31)
+        self._noise_pool: dict = {}
+        self._noise_i: dict = {}
 
         # adaptation is already handled at the receptor level; here we add
         # a slower habituation of the afferent population
@@ -165,8 +167,21 @@ class AfferentSystem:
         A = self.A
         target = A.spontaneous_hz + (A.rate_max - A.spontaneous_hz) * fclip(drive, 0, 1)
         r = prev + self._rate_alpha * (target - prev)
-        r = r * (1.0 + self.rng.normal(0, A.noise_sd_frac, r.shape))
+        r = r * (1.0 + A.noise_sd_frac * self._noise(r.shape))
         return fclip(r, 0.0, A.rate_max)
+
+    def _noise(self, shape: tuple) -> np.ndarray:
+        """Unit Gaussian noise from a pre-drawn pool (drawing 70 000 normals per
+        tick was the single largest cost of the dense skin)."""
+        pool = self._noise_pool.get(shape)
+        if pool is None:
+            pool = self.rng.standard_normal((8,) + tuple(shape)).astype(np.float32)
+            self._noise_pool[shape] = pool
+            self._noise_i[shape] = 0
+        i = self._noise_i[shape]
+        self._noise_i[shape] = (i + 1) % pool.shape[0]
+        # a random sign flip per tick breaks up the pool's periodicity
+        return pool[i] if (self.rng.random() < 0.5) else -pool[i]
 
     # ------------------------------------------------------------------
     def process(self, frame: ReceptorFrame, state, ctrl: np.ndarray) -> AfferentFrame:
