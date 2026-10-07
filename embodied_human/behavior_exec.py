@@ -425,7 +425,17 @@ class BehaviorExecutor:
             for nm in self.names:
                 if nm.startswith(("neck_side", "spine_side", "chest_side")):
                     tgt[self.idx[nm]] += 0.05 * amp * math.sin(w * t)
-        # balance guard: the closer the centre of mass is to the edge of the feet, the\n        # less the arms and trunk are allowed to throw it around\n        st = ag.state\n        guard = 1.0\n        if st is not None:\n            off = float(np.hypot(st.com_over_support[0] * 1.3, st.com_over_support[1]))\n            guard = float(np.clip(1.0 - (off - 0.035) / 0.05, 0.25, 1.0))\n        self.guard = guard\n        if guard < 0.999:\n            tgt = self.q_nom + guard * (tgt - self.q_nom)\n        vmax = 1.3 * min(b.speed, 1.8) * (0.7 if self.ambient else 1.0)
+        # balance guard: the closer the centre of mass is to the edge of the feet, the
+        # less the arms and trunk are allowed to throw it around
+        st = ag.state
+        guard = 1.0
+        if st is not None:
+            off = float(np.hypot(st.com_over_support[0] * 1.3, st.com_over_support[1]))
+            guard = float(np.clip(1.0 - (off - 0.035) / 0.05, 0.25, 1.0))
+        self.guard = guard
+        if guard < 0.999:
+            tgt = self.q_nom + guard * (tgt - self.q_nom)
+        vmax = 1.3 * min(b.speed, 1.8) * (0.7 if self.ambient else 1.0)
         step = np.clip(tgt - self.cmd, -vmax * dt, vmax * dt)
         self.cmd = self.cmd + step
         hands = np.array([nm.startswith(("thumb_", "index_", "fingers_")) for nm in self.names])
