@@ -31,9 +31,11 @@ class Rig:
     def __init__(self, port_mock, port_proxy, env=None, mock_env=None, state=None):
         self.state = Path(state or tempfile.mkdtemp(prefix="gw_state_"))
         self.pm, self.pp = port_mock, port_proxy
-        self.env = dict(os.environ, OR_UPSTREAM=f"http://127.0.0.1:{port_mock}/v1/chat/completions",
-                        OR_PORT=str(port_proxy), OR_STATE=str(self.state), OR_TIME_SCALE="0.02",
-                        OPENROUTER_API_KEY="test-not-real", **(env or {}))
+        base = dict(OR_UPSTREAM=f"http://127.0.0.1:{port_mock}/v1/chat/completions",
+                    OR_PORT=str(port_proxy), OR_STATE=str(self.state), OR_TIME_SCALE="0.02",
+                    OPENROUTER_API_KEY="test-not-real")
+        base.update(env or {})
+        self.env = dict(os.environ, **base)
         self.mock = subprocess.Popen([PY, str(HERE / "mock_upstream.py"), str(port_mock)],
                                      env=dict(os.environ, **(mock_env or {})))
         time.sleep(0.8)
