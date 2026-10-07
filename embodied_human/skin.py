@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .complexity import C as COMPLEXITY
 from .skeleton import BONE_BY_NAME, BONES, Geom
 
 # --------------------------------------------------------------------------
@@ -249,6 +250,14 @@ def default_patches() -> list[SkinPatch]:
     P.append(SkinPatch("lips", "jaw", "jaw_bone", "mucosa", "plane", 4, 2,
                        face="-y", surface="anterior"))
 
+    # Finer quantisation of every sheet: the whole patch table is the 1x body, and
+    # ``skin_density`` multiplies the sampling in both directions (so the taxel
+    # count grows with its square).  Glabrous skin keeps its relative advantage.
+    f = float(COMPLEXITY.skin_density)
+    if abs(f - 1.0) > 1e-9:
+        for p in P:
+            p.n_u = max(2, int(round(p.n_u * f)))
+            p.n_v = max(2, int(round(p.n_v * f)))
     return [p for p in P if p.enabled]
 
 
