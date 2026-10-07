@@ -1652,16 +1652,18 @@ class SkillSystem:
         ag = self.agent
         t0 = ag.t
         prev = self._rec_com()
+        peak = prev
         tucked = False
-        while ag.t - t0 < 12.0:
+        while ag.t - t0 < 14.0:
             com = self._rec_com()
+            peak = max(peak, com)
             if com > 0.40:
                 self.events.append("stand_up: cobra up")
                 return
             vel = (com - prev) / max(TICK, 1e-6)
             prev = com
-            if not tucked and com > 0.19 and vel > 0.04:
-                tucked = True  # rocking up: knees are unloaded, snatch them under
+            if not tucked and com > 0.24 and vel > 0.03:
+                tucked = True  # near the top: knees are unloaded, snatch them under
             if tucked and com < 0.16:
                 tucked = False  # missed it: rock again
             if tucked:
@@ -1677,10 +1679,9 @@ class SkillSystem:
                 arch = -0.05 - 0.30 * push
                 knee = 0.15 + 1.65 * u
                 hip = 0.25 * push - 1.05 * u
-                # kip: throw arms overhead + head back on the push, slam
-                # down on release — 8.7 kg arms at a 0.5 m lever roughly
-                # double the pump energy over the spine alone
-                arm = 0.10 + 1.90 * push
+                # full-range arm swing: overhead on release, slam down-back
+                # on the push, hands pressing the ground beside the hips
+                arm = 0.90 - 1.80 * push
                 self._rec_set({
                     "spine_bend": arch, "chest_bend": 0.7 * arch,
                     "neck_bend": -0.30 * push,
@@ -1690,14 +1691,15 @@ class SkillSystem:
                     "knee_l": knee, "knee_r": knee,
                     "ankle_l_flex": 0.30, "ankle_r_flex": 0.30})
             yield
-        if self._rec_com() > 0.30:
+        if self._rec_com() > 0.30 or peak > 0.30:
             self.events.append("stand_up: cobra up")
             return
-        if self._rec_com() > 0.24:
-            self.events.append("stand_up: cobra partial, continuing")
+        if peak > 0.26:
+            self.events.append(
+                f"stand_up: cobra rocking (peak {peak:.2f} m), continuing")
             return
         raise ActionFailed(f"stand_up: cobra made no progress "
-                           f"(COM {self._rec_com():.2f} m)")
+                           f"(COM {self._rec_com():.2f} m, peak {peak:.2f} m)")
 
     def _rec_situp(self):
         """From supine: plant the feet, crunch up to sitting with the strong
