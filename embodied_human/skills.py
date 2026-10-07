@@ -1618,9 +1618,16 @@ class SkillSystem:
                      "spine_bend": 0.0, "chest_bend": 0.0},
                     3.0, lambda: self._rec_com() > 0.25, "hand-plant",
                     proceed=lambda: True)
-                # Floor to kneel: one closed loop (pump, latch tuck on rising
-                # rocks, rise only once the knees carry load).
-                yield from self._rec_floor_to_kneel()
+                # Hand-walk: servos own the arms from here (see flag).
+                self._rec_hold_table = True
+                self._rec_set({"knee_l": 0.10, "knee_r": 0.10,
+                               "hip_l_flex": -0.05, "hip_r_flex": -0.05,
+                               "ankle_l_flex": 0.40, "ankle_r_flex": 0.40})
+                try:
+                    yield from self._rec_hand_walk()
+                    self._rec_walked = True
+                finally:
+                    self._rec_hold_table = False
             yield from self._rec_hold(
                 # Rise to tall kneel: extend the hips (thighs vertical) while
                 # the knees stay planted and the torso comes upright — the
