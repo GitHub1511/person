@@ -403,6 +403,7 @@ class SkillSystem:
         self.recovery_targets: dict[str, float] = {}
         self.recovery_active = False
         self._rec_hold_table = False
+        self._rec_climbing = False
         self._auto_recover_t = -1e9
         self._recover_attempts = 0
         self.crouch = 0.0
@@ -1853,6 +1854,7 @@ class SkillSystem:
                 sk.arm[s].stop()
             return False
         sk._rec_hold_table = True
+        sk._rec_climbing = True
         sk.events.append(f"stand_up: up the leg (COM {sk._rec_com():.2f} m), kneeling")
         return True
 
