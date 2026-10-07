@@ -14,6 +14,8 @@ AI_LOG.txt
 tools/openrouter_helper/.env
 tools/openrouter_helper/state/
 tools/openrouter_helper/pi/
+# Interviewer: runtime state (question timing) never goes to GitHub
+tools/interview/state/
 *.env
 .env
 
