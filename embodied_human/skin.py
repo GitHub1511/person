@@ -541,6 +541,13 @@ for _p in PATCHES:
     TAXEL_PATCH.extend([_p.region] * nsamp)
 TAXEL_PATCH = np.array(TAXEL_PATCH)
 
+# integer patch index per taxel, for broadcasting patch-level (organ-level)
+# quantities such as local blood flow onto the taxels
+PATCH_NAMES = sorted(set(TAXEL_PATCH.tolist()))
+_PATCH_ID = {n: i for i, n in enumerate(PATCH_NAMES)}
+TAXEL_PATCH_IDX = np.array([_PATCH_ID[n] for n in TAXEL_PATCH.tolist()], dtype=int)
+N_PATCHES = len(PATCH_NAMES)
+
 
 def summary() -> dict:
     """Human-readable description of the skin."""
