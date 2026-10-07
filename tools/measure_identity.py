@@ -28,11 +28,17 @@ from pathlib import Path
 
 TAG = re.compile(r"\] (THOUGHT|ACTION|HEARD|SAID|EVENT|INTERVIEW_QUESTION): (.*)$")
 THIRD_SELF = re.compile(
-    r"\b(the person|this person|the body|this body|the human|the agent|"
-    r"the individual|the subject)\b", re.I)
+    r"\b(the person|this person|a person|the body|this body|a body|the human|"
+    r"the agent|the individual|the subject|"
+    # PREAMBLE role confusion: the thinker casting itself as "the user/assistant"
+    r"the user|the assistant)\b", re.I)
 THIRD_NARR = re.compile(
     r"\b(he|she|they)\s+(wants?|feels?|thinks?|thinks|walks?|grabs?|says?|"
     r"said|is|was|does|did|has|had|looks?|stands?)\b", re.I)
+# Object/possessive third-person pronouns have no legitimate use in self-talk
+# here ("visible to them", "their recent movements"); bare matches count.
+THIRD_PRON = re.compile(
+    r"\b(them|themselves|their|theirs|him|himself|his|her|hers|herself)\b", re.I)
 FIRST = re.compile(r"\b(I|me|my|mine|myself|I'm|I've|I'll|I'd)\b")
 
 
@@ -69,10 +75,18 @@ def score(path: Path) -> dict:
         elif tag == "HEARD":
             heard.append(words_inside_quotes(body))
     last_heard = heard[-1] if heard else ""
-    thought_slips = sum(1 for t in thoughts
-                        if len(t.split()) >= 3 and (THIRD_SELF.search(t) or THIRD_NARR.search(t)))
-    speech_slips = sum(1 for s in saids
-                       if len(s.split()) >= 3 and (THIRD_SELF.search(s) or THIRD_NARR.search(s)))
+
+    def slips_in(lines: list[str]) -> int:
+        n = 0
+        for t in lines:
+            if len(t.split()) < 3:
+                continue
+            if THIRD_SELF.search(t) or THIRD_NARR.search(t) or THIRD_PRON.search(t):
+                n += 1
+        return n
+
+    thought_slips = slips_in(thoughts)
+    speech_slips = slips_in(saids)
     echoes = sum(1 for s in saids
                  if len(s.split()) >= 3 and last_heard and is_echo(s, last_heard))
     n_t, n_s = len(thoughts), len(saids)
