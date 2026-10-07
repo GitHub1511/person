@@ -99,6 +99,7 @@ point_at(thing)             point at something
 hand_pose("right", "fist")  hand shapes: open relaxed fist point pinch thumbs_up ok grip
 gesture("wave")             wave nod shake_head shrug clap thumbs_up think scratch_head drink bow
 crouch() / stand()          lower yourself / stand tall
+stand_up()                get back up after falling (also triggers on its own)
 say("words")                say something out loud; the words appear above your head
 blink("slow")               blink on purpose: normal slow double wink_left wink_right
 touch_self("eyes", "right", "rub")   put a hand on your own body. parts: eyes cheek nose mouth chin
@@ -131,6 +132,7 @@ TASK = (
     "answer; the body only does one thing at a time. "
     "A heard voice is someone else talking to you: never repeat it back with "
     "say(). Only say() your own words, or stay silent. "
+    "If you have fallen (on the floor), call stand_up() to get back up. "
     "The <answer> must contain ONLY those calls, no prose. Example:\n"
     "<answer>\nlook_at(\"apple\")\nwalk_to(\"table\")\n</answer>"
 )
@@ -141,7 +143,7 @@ ALLOWED_CALLS = {
     "grab": "grab", "pick_up": "grab", "release": "release", "put_down": "put_down",
     "reach": "reach", "point_at": "point_at", "hand_pose": "hand_pose",
     "gesture": "gesture", "crouch": "crouch", "stand": "stand", "wait": "wait",
-    "nothing": None, "stop": "stop",
+    "nothing": None, "stop": "stop", "stand_up": "stand_up",
     "blink": "blink", "touch_self": "touch_self", "express": "express",
     "rub_eyes": "rub_eyes", "scratch": "scratch",
 }

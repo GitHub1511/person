@@ -30,7 +30,7 @@ LOCOMOTION = ("walk_to", "walk", "turn", "face", "grab", "put_down", "reach")
 # Calls safe at any time.
 ALWAYS_SAFE = ("say", "look_at", "look_forward", "hand_pose", "gesture",
                "blink", "touch_self", "express", "rub_eyes", "scratch",
-               "wait", "nothing", "stop", "stand", "crouch", "release",
+               "wait", "nothing", "stop", "stand", "stand_up", "crouch", "release",
                "point_at", "pick_up")
 
 
@@ -99,7 +99,8 @@ def assess(agent, name: str, args: tuple, kwargs: dict,
     if fallen and name in ("walk_to", "walk", "turn", "grab", "reach",
                             "put_down", "crouch", "face"):
         return {"verdict": "deny", "calls": [],
-                "reason": f"{name}: I am on the floor, cannot move"}
+                "reason": f"{name}: I am on the floor, cannot move; "
+                          "call stand_up() instead (or wait for auto-recovery)"}
     if name in LOCOMOTION and loco_done:
         return {"verdict": "deny", "calls": [],
                 "reason": f"{name}: one move per turn; reconsider next thought"}
