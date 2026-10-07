@@ -231,7 +231,8 @@ class OcularSurface:
         act = np.tanh(eff * 1.4) * self.gain[None, :]
         w = {0: 0.0, 1: 0.0, 2: 0.0}
         n_k = np.maximum(np.bincount(self.kind, minlength=3), 1)
-        pop = [float(act[:, self.kind == k].mean()) for k in range(3)]
+        pop = [float(act[:, self.kind == k].mean()) if (self.kind == k).any() else 0.0
+               for k in range(3)]
 
         # ---- perception: central gain depends on mood, attention and sensitisation
         gain_c = ((1.0 + 0.7 * float(inp.anxiety) + 0.8 * float(inp.sensitisation)

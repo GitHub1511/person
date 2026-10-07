@@ -286,7 +286,7 @@ class BehaviorExecutor:
             d[TI["comfort"]] += o.gut_discomfort
             d[TI["soothe"]] += 0.4 * o.rumination
             d[TI["vigilance"]] += 0.5 * max(o.threat_tone, 0.0)
-        return np.clip(d, 0.0, 1.6)
+        return np.clip(np.nan_to_num(d, nan=0.0, posinf=1.6, neginf=0.0), 0.0, 1.6)
 
     # ------------------------------------------------------------------
     def decide(self, now: float) -> Behavior:
