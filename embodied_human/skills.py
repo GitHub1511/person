@@ -2397,7 +2397,9 @@ class SkillSystem:
                     self._rec_lunged = True
                     self.events.append("stand_up: lunge posted prone")
                     return
-                self.events.append("stand_up: rolled prone")
+                self.events.append("stand_up: rolled prone, trying cobra")
+                # Transition directly to cobra push-up from prone
+                yield from self._rec_cobra()
                 return
             if tucked and com > 0.42:
                 # caught a big rock onto the folded knees: skip ahead
