@@ -549,6 +549,14 @@ class SkillSystem:
                 i = self.motor_idx[nm]
                 v[i] = val
                 own[i] = True
+        if self.recovery_active:
+            # Fall recovery owns the whole body (legs, spine, arms): it must
+            # beat the posture spring, the gait hold and any gesture.
+            for nm, val in self.recovery_targets.items():
+                i = self.motor_idx.get(nm)
+                if i is not None:
+                    v[i] = val
+                    own[i] = True
         if self.crouch > 1e-3 and not self.agent.gait.hold_stance:
             c = self.crouch
             for s in "lr":
