@@ -1627,7 +1627,17 @@ class SkillSystem:
             table_ok = yield from self._rec_table_assist()
             if not table_ok:
                 yield from self._rec_extract()
-            if table_ok:
+            if self._rec_lunged:
+                # Landed a lunge at the rock peak: front quad presses straight
+                # to standing (strongest motion available: 200 Nm knee).
+                F = "l" if self._recover_attempts % 2 == 0 else "r"
+                yield from self._rec_hold(
+                    {f"knee_{F}": 0.15, f"hip_{F}_flex": -0.05,
+                     "spine_bend": 0.05, "chest_bend": 0.0,
+                     "sh_l_flex": 0.20, "sh_r_flex": 0.20,
+                     "elbow_l": -0.40, "elbow_r": -0.40},
+                    6.0, lambda: self._rec_com() > 0.70, "lunge-press")
+            elif table_ok:
                 self._rec_caught = True
                 self.events.append("stand_up: table climb worked, kneeling")
             else:
