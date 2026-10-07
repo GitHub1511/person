@@ -1,0 +1,24 @@
+{
+  "providers": {
+    "gateway": {
+      "baseUrl": "http://127.0.0.1:8765/v1",
+      "api": "openai-completions",
+      "apiKey": "gateway-local",
+      "headers": {
+        "HTTP-Referer": "https://pi.dev",
+        "X-Title": "pi"
+      },
+      "models": [
+        {
+          "id": "auto",
+          "name": "OpenRouter free models via the local gateway (order, quotas and rate limit enforced there)",
+          "reasoning": false,
+          "input": ["text"],
+          "contextWindow": 128000,
+          "maxTokens": 32000,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+        }
+      ]
+    }
+  }
+}

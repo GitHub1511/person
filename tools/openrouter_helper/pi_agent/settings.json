@@ -1,0 +1,9 @@
+{
+  "defaultProvider": "gateway",
+  "defaultModel": "auto",
+  "defaultThinkingLevel": "off",
+  "defaultTools": ["read", "bash", "edit", "write", "grep", "find", "ls"],
+  "defaultProjectTrust": "never",
+  "quietStartup": true,
+  "compaction": { "enabled": true, "reserveTokens": 8000, "keepRecentTokens": 30000 }
+}
