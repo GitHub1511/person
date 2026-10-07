@@ -1590,7 +1590,10 @@ class SkillSystem:
                 0.1, lambda: False, "curl", proceed=lambda: True)
             yield from self._rec_extract()
             yield from self._rec_roll()
-            if self._rec_chest_face_z() > 0.50:
+            if self._rec_caught:
+                # Caught a big roll onto the folded knees: straight to kneel.
+                self.events.append("stand_up: caught the roll, kneeling")
+            elif self._rec_chest_face_z() > 0.50:
                 yield from self._rec_situp()
             else:
                 # Cobra setup: bring the hands back BESIDE the chest with
