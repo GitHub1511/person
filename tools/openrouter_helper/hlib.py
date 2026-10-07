@@ -747,7 +747,7 @@ def fetch_web(urls: list[str], limit_chars: int = 9000) -> list[tuple[str, str]]
     import socket
     from urllib.parse import urlparse
     web = STATE / "web"
-    web.mkdir(exist_ok=True)
+    web.mkdir(parents=True, exist_ok=True)
     try:
         opener = urllib.request.build_opener(_NoRedirect)
     except Exception:
