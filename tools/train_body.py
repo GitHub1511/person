@@ -121,6 +121,10 @@ def babble(job: dict) -> dict:
                 r = records[-2]
                 records[-2] = (r[0], 1, r[2], r[3], r[4])
             total += ag.t
+            del ex
+            del ag
+            import gc
+            gc.collect()                      # a MuJoCo model + data per body: do not pile them up
             ag = build_agent(int(rng.integers(0, 2 ** 31)))
             ex = configure(ag)
             seen = 0
