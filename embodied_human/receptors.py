@@ -402,6 +402,11 @@ class TactileSystem:
         fa1 = g["fa1"] * T.fa1_gain * np.tanh(self.adapt_fa1 * 1.4)
         fa2 = g["fa2"] * T.fa2_gain * np.tanh(self.adapt_fa2 * 2.2)
         ct = g["ct"] * T.ct_gain * np.tanh(self.adapt_ct * 3.0)
+        if self.extended:
+            # receptors that have been driven hard for a while respond less
+            fat = 1.0 - 0.30 * self.rfatigue
+            sa1 = sa1 * fat
+            fa1 = fa1 * fat
 
         # ---- nociceptors -------------------------------------------------
         # Mechanical nociceptors are thresholded on *pressure*, with a
@@ -410,6 +415,9 @@ class TactileSystem:
         # pressure on a fingertip is aversive.
         pressure_kpa = pressure_pa / 1000.0
         threshold_kpa = g["noci_threshold_kpa"]
+        if self.extended:
+            # sensitised tissue hurts at a lower pressure (hyperalgesia)
+            threshold_kpa = threshold_kpa * (1.0 - 0.45 * self.sens)
         mech_over = fclip(pressure_kpa - threshold_kpa, 0.0, None)
         noci_mech_drive = mech_over / 400.0
         heat_over = fclip(self.temperature - T.noci_heat_threshold, 0.0, None)
@@ -469,6 +477,12 @@ class TactileSystem:
         out[:, CH["temperature"]] = self.temperature
         out[:, CH["slip"]] = slip
         out[:, CH["friction_util"]] = util * (normal > 0.05)
+
+        if self.extended:
+            self._extended_channels(out, dt, normal, su, sv, shear_mag, force_rate,
+                                    pressure_kpa, threshold_kpa, vib_broad, hair,
+                                    noci_mech_drive, world_normal, state,
+                                    blood_flow, cold_drive, band_sa)
 
         self.prev_normal = normal
         return out, self._aggregate(out, contact_any)
