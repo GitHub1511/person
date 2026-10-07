@@ -1676,12 +1676,20 @@ class SkillSystem:
         d = self.agent.data
         return d.xpos[self.agent.meta.body_ids[f"hand_{side}"]].copy()
 
+    def _rec_foot_home(self, side: str) -> np.ndarray:
+        d = self.agent.data
+        return d.xpos[self.agent.meta.body_ids[f"foot_{side}"]].copy()
+
+    def _rec_servo_hand(self, side: str, p: np.ndarray) -> None:
+        q = p.copy()
+        self.arm[side].start(lambda p=q: (p, None), use_trunk=False, w_ori=0.0)
+
     def _rec_hand_walk(self):
         """Walk the hands back toward the feet until the torso is up in a
-        bent-over stance, then unroll to standing. Each planted hand is held
-        in world space by its arm servo (proven in reach/grab); the moving
-        hand steps ~8 cm toward the feet. Floor friction does the work —
-        no reach, no anchors, no timing luck."""
+        bent-over stance, then unroll to standing. Each step is lift (through
+        the air, no drag) → shift back → press down INTO the ground (sets
+        stiction so the hand anchors instead of sliding). Stops when a hand
+        reaches its foot, then unrolls."""
         ag = self.agent
         sk = self
         R = ag.data.xmat[ag.meta.body_ids["chest"]].reshape(3, 3)
@@ -1694,26 +1702,45 @@ class SkillSystem:
         for s in "lr":
             h = sk.hands[s]
             h.owned = True
-            p = sk._rec_hand_home(s).copy()
-            sk.arm[s].start(lambda p=p: (p, None), use_trunk=False, w_ori=0.0)
+            sk._rec_servo_hand(s, sk._rec_hand_home(s))
         t0 = ag.t
         step_side = "l"
         try:
-            while ag.t - t0 < 40.0:
+            while ag.t - t0 < 60.0:
                 up = float(ag.data.xmat[ag.meta.body_ids["chest"]].reshape(3, 3)[2, 2])
                 if up > 0.45 and sk._rec_com() > 0.55:
                     sk.events.append("stand_up: bent-over stance, unrolling")
                     break
-                # plant the standing hand hard, step the other one back
                 s = step_side
                 step_side = "r" if s == "l" else "l"
+                # stop when this hand is already at its foot
+                if float(np.linalg.norm(sk._rec_hand_home(s)
+                                       - sk._rec_foot_home(s))) < 0.30:
+                    sk.events.append("stand_up: hands at feet, unrolling")
+                    break
                 cur = sk._rec_hand_home(s)
-                tgt = (cur + np.array([back[0], back[1], 0.0]) * 0.08).copy()
-                tgt[2] = max(tgt[2], 0.03)
-                sk.arm[s].start(lambda p=tgt: (p, None), use_trunk=False, w_ori=0.0)
+                over = cur.copy()
+                over[2] = cur[2] + 0.10
+                sk._rec_servo_hand(s, over)
                 t2 = ag.t
-                while ag.t - t2 < 2.5:
-                    if sk.arm[s].err_pos < 0.06:
+                while ag.t - t2 < 1.0:
+                    if sk.arm[s].err_pos < 0.05:
+                        break
+                    yield
+                shifted = (cur + np.array([back[0], back[1], 0.0]) * 0.10).copy()
+                shifted[2] = cur[2] + 0.10
+                sk._rec_servo_hand(s, shifted)
+                t2 = ag.t
+                while ag.t - t2 < 1.2:
+                    if sk.arm[s].err_pos < 0.05:
+                        break
+                    yield
+                plant = shifted.copy()
+                plant[2] = 0.005  # press into the ground: stiction anchor
+                sk._rec_servo_hand(s, plant)
+                t2 = ag.t
+                while ag.t - t2 < 1.2:
+                    if sk.arm[s].err_pos < 0.05:
                         break
                     yield
                 yield
