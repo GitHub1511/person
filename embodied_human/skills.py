@@ -1618,24 +1618,9 @@ class SkillSystem:
                      "spine_bend": 0.0, "chest_bend": 0.0},
                     3.0, lambda: self._rec_com() > 0.25, "hand-plant",
                     proceed=lambda: True)
-                # Cobra pump: a single arch rocks up and slams back, so pump
-                # it (~0.6 Hz, like pushing a swing) while ratcheting the
-                # knees under; each bounce starts a little higher.
-                yield from self._rec_cobra()
-            if self._rec_caught:
-                # Tucked at the rock peak and still high: knees are already
-                # under, go straight to tall kneel without re-blending.
-                self.events.append("stand_up: caught the peak, kneeling")
-            else:
-                # Knees under: from a raised chest, drag the knees forward under
-                # the hips (gravity helps now) into all-fours/kneel.
-                yield from self._rec_hold(
-                    {"knee_l": 2.00, "knee_r": 2.00,
-                     "hip_l_flex": -1.20, "hip_r_flex": -1.20,
-                     "spine_bend": 0.30, "chest_bend": 0.15,
-                     "sh_l_flex": 0.60, "sh_r_flex": 0.60,
-                     "elbow_l": -0.30, "elbow_r": -0.30},
-                    5.0, lambda: self._rec_com() > 0.42, "knees-under")
+                # Floor to kneel: one closed loop (pump, latch tuck on rising
+                # rocks, rise only once the knees carry load).
+                yield from self._rec_floor_to_kneel()
             yield from self._rec_hold(
                 # Rise to tall kneel: extend the hips (thighs vertical) while
                 # the knees stay planted and the torso comes upright — the
