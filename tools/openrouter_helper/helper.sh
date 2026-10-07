@@ -62,6 +62,8 @@ json_get() { sed -n "s/.*\"$1\": *\"\{0,1\}\([^\",}]*\)\"\{0,1\}.*/\1/p" | head 
 
 cmd_plan() {
   proxy_start || return 1
+  # the snapshot comes FIRST: it must be the tree as it was before any coder could touch it
+  hl snapshot >/dev/null
   log "reading the project state"
   hl context || return 1
   hl plan-request || { log "no quota left right now"; return 3; }
@@ -75,8 +77,7 @@ cmd_plan() {
   fi
   hl plan-parse "$STATE/plan_resp.json" || { log "reply not in the expected format (kept in $STATE/bad_plan.txt)"; return 2; }
   hl attach-web || true
-  hl snapshot >/dev/null
-  log "task ready: $STATE/next_task.md   (snapshot taken)"
+  log "task ready: $STATE/next_task.md   (snapshot was taken before planning)"
 }
 
 seconds_to_wait_for_quota() {
@@ -117,7 +118,7 @@ cmd_run() {
     fails=0
     title=$("$PY" -c "import json;print(json.load(open('$STATE/next_plan.json'))['title'])" 2>/dev/null || echo "?")
     wait_for_coder
-    [ -f "$STATE/STOP" ] && break
+    # even when asked to stop, never leave a step unverified: check it (and undo it if broken) first
     out=$(hl verify); echo "$out"
     if echo "$out" | head -1 | grep -q '^PASS'; then
       hl record "$title" "accepted" "$(echo "$out" | sed -n 2p)"

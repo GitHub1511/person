@@ -476,6 +476,8 @@ def verify() -> int:
             for k in ("nan", "fallen"):
                 if smoke.get(k):
                     problems.append(f"smoke: {k}")
+    if problems and not changed:
+        problems.insert(0, "the tree was ALREADY broken before this step (nothing changed since the snapshot)")
     res = {"pass": not problems, "problems": problems, "changed": changed, "smoke": smoke,
            "seconds": round(time.time() - t0, 1)}
     (STATE / "last_verify.json").write_text(json.dumps(res, indent=1))
