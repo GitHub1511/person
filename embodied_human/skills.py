@@ -2411,7 +2411,7 @@ class SkillSystem:
                 self._rec_caught = True
                 self.events.append("stand_up: caught roll onto knees")
                 return
-            if lunged and com > 0.42:
+            if lunged and com > 0.38:
                 # lunge landed: front leg takes weight, press to stand
                 self._rec_lunged = True
                 self.events.append("stand_up: lunged, pressing up")
