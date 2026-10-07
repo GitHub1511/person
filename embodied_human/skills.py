@@ -1588,7 +1588,7 @@ class SkillSystem:
                  "elbow_l": -1.00, "elbow_r": -1.00},
                 0.1, lambda: False, "curl", proceed=lambda: True)
             yield from self._rec_roll()
-            if self._rec_chest_up_z() < -0.40:
+            if self._rec_chest_face_z() > 0.50:
                 yield from self._rec_situp()
             else:
                 # Cobra setup: bring the hands back BESIDE the chest with
@@ -1754,20 +1754,20 @@ class SkillSystem:
         sign = 1.0 if self._recover_attempts % 2 == 1 else -1.0
         t0 = ag.t
         last_flip = ag.t
-        best = self._rec_chest_up_z()
+        best = self._rec_chest_face_z()
         while ag.t - t0 < 16.0:
-            if self._rec_chest_up_z() > 0.55 or self._rec_com() > 0.35:
+            if self._rec_chest_face_z() < -0.50 or self._rec_com() > 0.35:
                 self.events.append("stand_up: rolled prone")
                 return
             # pump the swing at ~0.8 Hz to rock over the hump; static holds
             # alone rock up part-way and fall back
             pump = 0.55 + 0.45 * float(np.sin(2 * np.pi * 0.8 * (ag.t - t0)))
             if ag.t - last_flip > 3.0:
-                if self._rec_chest_up_z() > best + 0.05:
-                    best = self._rec_chest_up_z()
+                if self._rec_chest_face_z() < best - 0.05:
+                    best = self._rec_chest_face_z()
                 else:
                     sign = -sign  # wrong side: mirror the whole pose
-                    best = self._rec_chest_up_z()
+                    best = self._rec_chest_face_z()
                 last_flip = ag.t
             full = dict(self.q_nom_map)
             full.update(pose(sign, pump))
@@ -1775,7 +1775,7 @@ class SkillSystem:
                            if nm in ag.meta.qpos_addr})
             yield
         raise ActionFailed("stand_up: could not roll prone "
-                           f"(chest_up {self._rec_chest_up_z():+.2f})")
+                           f"(face {self._rec_chest_face_z():+.2f})")
 
     def _rec_stand(self, nom):
         tgt = {f"knee_{s}": nom.get(f"knee_{s}", 0.10) for s in "lr"}
