@@ -1638,6 +1638,7 @@ class SkillSystem:
                      "sh_l_flex": 0.20, "sh_r_flex": 0.20,
                      "elbow_l": -0.40, "elbow_r": -0.40},
                     6.0, lambda: self._rec_com() > 0.70, "lunge-press")
+                self._rec_pressed = True
             elif table_ok:
                 self._rec_caught = True
                 self.events.append("stand_up: table climb worked, kneeling")
