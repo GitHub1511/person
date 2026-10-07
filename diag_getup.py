@@ -60,7 +60,7 @@ def trial(tip: str, auto: bool) -> dict:
     bals = []
     com_peak = 0.0
     i = 0
-    while ag.t - t0 < 75.0:
+    while ag.t - t0 < 120.0:
         ag.step()
         bals.append(ag.motor.balance_error)
         i += 1
