@@ -1629,6 +1629,12 @@ class SkillSystem:
             if not table_ok:
                 yield from self._rec_extract()
                 yield from self._rec_roll()
+                # roll may have carried the body to the table: retry climb
+                if not self._rec_caught and not self._rec_lunged \
+                        and self._rec_furniture_gap() < 0.55:
+                    table_ok = yield from self._rec_table_assist()
+                    if table_ok:
+                        self._rec_caught = True
             if self._rec_lunged:
                 # Landed a lunge at the rock peak: front quad presses straight
                 # to standing (strongest motion available: 200 Nm knee).
