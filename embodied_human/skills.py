@@ -1612,16 +1612,18 @@ class SkillSystem:
                      "ankle_l_flex": 0.30, "ankle_r_flex": 0.30},
                     4.0, lambda: self._rec_knee() > 1.40, "knees-tuck",
                     proceed=lambda: True)
-                # Press: extend the elbows, toes dug, chest rises to all-fours.
+                # Cobra: arch the strong back extensors to lift the chest while
+                # the pelvis stays pinned (prone legs give no leverage, so the
+                # back — not the arms — does the lifting).
                 yield from self._rec_hold(
-                    {"elbow_l": -0.05, "elbow_r": -0.05,
+                    {"spine_bend": -0.30, "chest_bend": -0.20,
+                     "elbow_l": -0.05, "elbow_r": -0.05,
                      "sh_l_flex": 0.10, "sh_r_flex": 0.10,
-                     "spine_bend": -0.10, "chest_bend": -0.05,
-                     "hip_l_flex": -0.90, "hip_r_flex": -0.90,
-                     "knee_l": 1.80, "knee_r": 1.80,
+                     "hip_l_flex": 0.15, "hip_r_flex": 0.15,
+                     "knee_l": 0.15, "knee_r": 0.15,
                      "ankle_l_flex": 0.30, "ankle_r_flex": 0.30},
-                    4.0, lambda: self._rec_com() > 0.35, "press",
-                    proceed=lambda: self._rec_com() > 0.28)
+                    4.0, lambda: self._rec_com() > 0.30, "cobra",
+                    proceed=lambda: self._rec_com() > 0.24)
             # Knees under: from a raised chest, drag the knees forward under
             # the hips (gravity helps now) into all-fours/kneel.
             yield from self._rec_hold(
