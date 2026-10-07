@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .complexity import C as COMPLEXITY
+from .complexity import C as COMPLEXITY, load as load_complexity
 
 # --------------------------------------------------------------------------
 # Paths
