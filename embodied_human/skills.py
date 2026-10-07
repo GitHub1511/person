@@ -1594,8 +1594,10 @@ class SkillSystem:
                  "spine_bend": 0.40, "chest_bend": 0.25,
                  "elbow_l": -1.00, "elbow_r": -1.00},
                 0.1, lambda: False, "curl", proceed=lambda: True)
-            yield from self._rec_extract()
             table_ok = yield from self._rec_table_assist()
+            if not table_ok:
+                yield from self._rec_extract()
+                table_ok = False
             if table_ok:
                 self._rec_caught = True
                 self.events.append("stand_up: table climb worked, kneeling")
