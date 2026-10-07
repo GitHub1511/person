@@ -540,20 +540,43 @@ class SkillSystem:
         return np.asarray(self.world.from_ego(*CHAIR_OFFSET), float)
 
     def _deliver_voice(self, raw: str, utt, spk: np.ndarray, dist: float,
-                       amp: float, t_ready: float, dur: float) -> None:
-        """Convert an arrived utterance into a HeardEvent (deletion only)."""
+                       amp: float, t_ready: float, dur: float, base: float = 0.0) -> None:
+        """Convert an arrived utterance into a HeardEvent (deletion only).
+
+        Confidence is computed on the transducer's own terms, so a broken or
+        bypassed cochlea yields silence, never words:
+        - V: analytic voice loudness at the ear, same 1/(d^2) geometry the
+          cochlea itself uses;
+        - bump: how much the live band-energy mean actually moved since the
+          utterance was scheduled (gates inaudibility AND doubles as the
+          injection-death check -- no transducer movement, no hearing);
+        - M: concurrent transient activity from the adapted drive, i.e. live
+          masking, plus a penalty while the person's own voice is sounding.
+        """
         try:
             coch = self.agent.receptors.cochlea
-            loud_now = float(np.log1p(amp * 20.0 / (dist * dist + 0.05)))
+            V = float(np.log1p(amp * 20.0 / (dist * dist + 0.05)))
             try:
-                noise = float(np.asarray(coch.level).sum())
+                lvl = np.asarray(coch.level, float)
+                bump = max(0.0, float(lvl.mean()) - base)
             except Exception:
-                noise = 0.0
+                bump = 0.0
+            if bump <= 1e-4:
+                return                    # the ear did not move: inaudible
+            try:
+                ad = np.asarray(getattr(coch, "adapt", lvl * 0.0), float)
+                drv = np.tanh(2.2 * (lvl - 0.6 * ad))
+                M = float(np.maximum(drv, 0.0).mean())
+            except Exception:
+                M = 0.0
             speaking = bool(self.speech.speaking or self.speech.jaw > 1e-3)
-            snr = loud_now - 0.5 * noise - (0.6 if speaking else 0.0)
-            conf = float(1.0 / (1.0 + np.exp(-(snr - 1.1) * 2.2)))
+            snr = min(V, 1.0 + float(np.log1p(5000.0 * bump))) \
+                - 2.0 * M - (0.6 if speaking else 0.0)
+            z = max(-50.0, min(50.0, (snr - 1.75) * 2.2))  # never overflow
+            conf = float(1.0 / (1.0 + np.exp(-z)))
             if conf < 0.25:
                 return                    # inaudible: no entry, no poke, silence
+            loud_now = V
             words = raw.split(" ")
             keep_p = float(np.clip(conf, 0.05, 0.95))
             tick = int(t_ready * 10)
