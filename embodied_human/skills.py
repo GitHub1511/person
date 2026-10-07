@@ -2123,8 +2123,7 @@ class SkillSystem:
         # Allow table assist from front (remove inside check which fails when body is under table)
         # The body approaches table front-on (x=0), so we need to reach the front legs at x=±0.43
         if gap > 0.85:
-            sk.events.append(f"stand_up: table leg {'under' if inside else 'too far'} "
-                             f"(gap {gap:.2f} m), floor routine")
+            sk.events.append(f"stand_up: table leg too far (gap {gap:.2f} m), floor routine")
             return False
         out = np.array([c[0] - cx, c[1] - cy, 0.0])
         out /= max(np.linalg.norm(out), 1e-6)
