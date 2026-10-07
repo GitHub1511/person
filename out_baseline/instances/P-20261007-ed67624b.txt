@@ -3,3 +3,6 @@ started_utc: 2026-10-07T17:47:59Z
 seed: 7
 backend: SCRIPTED STAND-IN (no language model loaded)
 ---
+[2026-10-07T17:48:19Z t=5.1s] HEARD: "hello there"
+[2026-10-07T17:48:19Z t=5.1s] THOUGHT: That was a greeting, so I will answer it.
+[2026-10-07T17:48:19Z t=5.1s] ACTION: gesture('wave'); say('Hello.') | latency 0.2s
