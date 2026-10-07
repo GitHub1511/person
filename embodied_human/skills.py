@@ -1996,6 +1996,9 @@ class SkillSystem:
             t2 = ag.t
             while ag.t - t2 < 1.0:
                 coord()
+                if sk.hands["l"].contact.get("support", 0.0) > 40.0 \
+                        or sk.hands["r"].contact.get("support", 0.0) > 40.0:
+                    return True
                 yield
             return False
 
