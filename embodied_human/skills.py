@@ -2406,7 +2406,7 @@ class SkillSystem:
                 # Transition directly to cobra push-up from prone
                 yield from self._rec_cobra()
                 return
-            if tucked and com > 0.42:
+            if tucked and com > 0.34:
                 # caught a big rock onto the folded knees: skip ahead
                 self._rec_caught = True
                 self.events.append("stand_up: caught roll onto knees")
