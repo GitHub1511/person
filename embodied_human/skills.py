@@ -2202,8 +2202,6 @@ class SkillSystem:
                 self.events.append("stand_up: lunging at the peak")
             elif not tucked and com > 0.28 and vel > 0.03:
                 tucked = True  # big rock: fold knees, land on them
-            elif not tucked and com > 0.28 and vel > 0.03:
-                tucked = True  # big rock: fold knees, land on them
             if tucked and com < 0.18:
                 tucked = False
             if lunged:
