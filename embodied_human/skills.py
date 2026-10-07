@@ -972,8 +972,10 @@ class SkillSystem:
             if abs(e) > 0.45 and dist > 0.25:
                 g.walk(0.0, float(np.clip(1.3 * e, -0.55, 0.55)))
             else:
-                speed = float(np.clip(0.9 * dist, 0.15, 0.36))
-                g.walk(speed, float(np.clip(1.4 * e, -0.35, 0.35)))
+                bal = float(getattr(self.agent.motor, "balance_error", 0.0) or 0.0)
+                slow = float(max(0.35, 1.0 - 8.0 * bal))
+                speed = float(np.clip(0.9 * dist, 0.15, 0.36)) * slow
+                g.walk(speed, float(np.clip(1.4 * e, -0.35, 0.35)) * slow)
             if self._fell():
                 raise ActionFailed("I fell over")
             if self.agent.t - t0 > 12.0 + 6.0 * d0:
