@@ -1868,17 +1868,30 @@ class SkillSystem:
         t0 = ag.t
         last_flip = ag.t
         best = self._rec_chest_face_z()
+        prev = self._rec_com()
+        peak = prev
+        tucked = False
         while ag.t - t0 < 12.0:
             face = self._rec_chest_face_z()
-            if face < -0.50 or self._rec_com() > 0.35:
+            com = self._rec_com()
+            peak = max(peak, com)
+            vel = (com - prev) / max(TICK, 1e-6)
+            prev = com
+            if face < -0.50 or com > 0.35:
                 self.events.append("stand_up: rolled prone")
                 return
             if face > 0.50:
                 self.events.append("stand_up: rolled supine")
                 return
-            if face > 0.50:
-                self.events.append("stand_up: rolled supine")
+            if tucked and com > 0.42:
+                # caught a big rock onto the folded knees: skip ahead
+                self._rec_caught = True
+                self.events.append("stand_up: caught roll onto knees")
                 return
+            if not tucked and com > 0.28 and vel > 0.03:
+                tucked = True  # big rock: fold knees, land on them
+            if tucked and com < 0.18:
+                tucked = False
             # pump the swing at ~0.8 Hz to rock over the hump; static holds
             # alone rock up part-way and fall back
             pump = 0.55 + 0.45 * float(np.sin(2 * np.pi * 0.8 * (ag.t - t0)))
@@ -1889,11 +1902,22 @@ class SkillSystem:
                     sign = -sign  # wrong side: mirror the whole pose
                     best = self._rec_chest_face_z()
                 last_flip = ag.t
-            full = dict(self.q_nom_map)
-            full.update(self._rec_roll_pose(sign, pump))
-            self._rec_set({nm: tv for nm, tv in full.items()
-                           if nm in ag.meta.qpos_addr})
+            if tucked:
+                self._rec_set({
+                    "knee_l": 1.90, "knee_r": 1.90,
+                    "hip_l_flex": -1.10, "hip_r_flex": -1.10,
+                    "spine_bend": 0.20, "chest_bend": 0.10,
+                    "sh_l_flex": 0.60, "sh_r_flex": 0.60})
+            else:
+                full = dict(self.q_nom_map)
+                full.update(self._rec_roll_pose(sign, pump))
+                self._rec_set({nm: tv for nm, tv in full.items()
+                               if nm in ag.meta.qpos_addr})
             yield
+        if peak > 0.30 or abs(self._rec_chest_face_z()) > 0.35:
+            self.events.append(
+                f"stand_up: rolling on (peak {peak:.2f} m)")
+            return
         raise ActionFailed("stand_up: could not roll prone "
                            f"(face {self._rec_chest_face_z():+.2f})")
 
