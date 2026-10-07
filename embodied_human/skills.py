@@ -1762,21 +1762,24 @@ class SkillSystem:
             return False
 
         def press_anchor(side: str) -> bool:
-            """Press the planted hand down and verify stiction by position:
-            a hand that stays within 2 cm over 0.7 s while pressed is an
-            anchor; one that drifts is slipping and gets re-pressed deeper
-            (up to 3 tries) before giving up on it."""
+            """Press the planted hand down and verify it CARRIES LOAD
+            (support force > 25 N sustained): a positioned-but-unloaded hand
+            is not an anchor. Presses deeper (up to 3 tries) before giving
+            up on it."""
             for depth in (0.005, -0.010, -0.025):
                 cur = sk._rec_hand_home(side)
                 tgt = cur.copy()
                 tgt[2] = depth
                 sk._rec_servo_hand(side, tgt)
                 t2 = ag.t
+                loaded = False
                 while ag.t - t2 < 0.7:
                     coord()
+                    if sk.hands[side].contact.get("support", 0.0) > 25.0:
+                        loaded = True
                     yield
                 now = sk._rec_hand_home(side)
-                if float(np.linalg.norm(now - cur)) < 0.020:
+                if loaded and float(np.linalg.norm(now - cur)) < 0.05:
                     return True
             return False
 
