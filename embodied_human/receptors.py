@@ -1084,38 +1084,6 @@ class ChemoSystem:
         ])
         self.prev_odor = self.odor_conc.copy()
         return self.odor_conc.copy(), taste, summary
-            jid = meta.object_qpos_addr.get(obj.name)
-            if jid is None:
-                continue
-            p = data.qpos[jid:jid + 3]
-            d = float(np.linalg.norm(nose - p))
-            if obj.odor is not None and d < self.C.olfactory_range:
-                # 1/r falloff, clipped
-                conc = np.exp(-(d / self.C.olfactory_range) ** 2 * 2.0)
-                odor += obj.odor * conc
-        # adaptation: receptors stop responding to a steady odour
-        self.odor_conc += (odor - self.odor_conc) * 0.12
-        self._seen += (self.odor_conc - self._seen) * 0.01
-        novelty = float(np.abs(self.odor_conc - self._seen).sum())
-        self.novelty += 0.1 * (novelty - self.novelty)
-
-        # gustation: tongue-object contact
-        for c in state.contacts:
-            for bid, other in ((c.body1, c.name2), (c.body2, c.name1)):
-                bname = _body_name_of(meta, bid)
-                if bname != "jaw":
-                    continue
-                for obj in self.objects:
-                    if obj.name in other and obj.taste is not None:
-                        taste = np.maximum(taste, obj.taste)
-                        tongue_hit = 1.0
-        summary = np.array([
-            float(self.odor_conc.sum()),
-            self.novelty,
-            float(np.dot(self.odor_conc, np.linspace(-1, 1, self.n_olf))),
-            float(np.linalg.norm(state.com_vel)) * 0.1 + 0.2,
-        ])
-        return self.odor_conc.copy(), taste, summary
 
     def reset(self) -> None:
         self.odor_conc[:] = 0

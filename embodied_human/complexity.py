@@ -52,6 +52,7 @@ class Complexity:
     # ---- chemical senses ---------------------------------------------------
     olfactory_receptors: int = 320     # receptor types (glomeruli)
     taste_cell_types: int = 48
+    stimuli: bool = False
     # ---- vision ------------------------------------------------------------
     retina_w: int = 96
     retina_h: int = 72
