@@ -1774,9 +1774,8 @@ class SkillSystem:
                 return
             vel = (com - prev) / max(TICK, 1e-6)
             prev = com
-            if not tucked and com > 0.24 and vel > 0.03:
-                tucked = True  # near the top: fold the knees under and STAY
-                # folded — subsequent rocks pivot on the knees and climb
+            if not tucked and com > 0.19 and vel > 0.04:
+                tucked = True  # rocking up: fold early so the fold lands at the peak
             if tucked:
                 push = max(0.0, float(np.sin(2 * np.pi * 0.55 * (ag.t - t0))))
                 arch = -0.05 - 0.30 * push
