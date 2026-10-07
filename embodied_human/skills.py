@@ -1680,6 +1680,17 @@ class SkillSystem:
         except Exception:
             return 0.0
 
+    def _rec_chest_face_z(self) -> float:
+        """Chest facing direction, z-component: -1 face-down (prone), +1
+        face-up (supine), 0 upright or on the side. (Chest-up alone cannot
+        separate prone from side-lying — both read ~0.)"""
+        try:
+            ag = self.agent
+            cid = ag.meta.body_ids["chest"]
+            return float(-ag.data.xmat[cid].reshape(3, 3)[1, 2])
+        except Exception:
+            return 0.0
+
     def _rec_set(self, tgt: dict) -> None:
         for nm, tv in tgt.items():
             if nm in self.motor_idx:
@@ -1723,7 +1734,7 @@ class SkillSystem:
         is kept (hill-climbing on the live orientation).
         """
         ag = self.agent
-        if self._rec_chest_up_z() > 0.55 or self._rec_com() > 0.35:
+        if self._rec_chest_face_z() < -0.50 or self._rec_com() > 0.35:
             return
 
         def pose(sign, pump=1.0):
