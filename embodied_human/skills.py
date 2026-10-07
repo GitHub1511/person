@@ -1792,6 +1792,8 @@ class SkillSystem:
             for z in (0.050, 0.040, 0.030, 0.020):
                 if cur[2] <= z + 0.002:
                     continue  # already at/below this rung
+                tgt = cur.copy()
+                tgt[2] = z
                 sk._rec_servo_hand(side, tgt)
                 t2 = ag.t
                 while ag.t - t2 < 0.6:
