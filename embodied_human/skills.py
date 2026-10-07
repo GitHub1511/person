@@ -1678,9 +1678,10 @@ class SkillSystem:
                 finally:
                     if not self._rec_walked:
                         self._rec_hold_table = False
-            if self._rec_walked:
-                # Bent-over stance reached and unrolled: straight to stand.
-                self.events.append("stand_up: walked up, standing")
+            if self._rec_walked or self._rec_pressed:
+                # Bent-over stance reached and unrolled, or pressed up from a
+                # lunge: straight to stand verify.
+                self.events.append("stand_up: up high, standing")
             else:
                 yield from self._rec_hold(
                     # Rise to tall kneel: extend the hips (thighs vertical) while
