@@ -118,20 +118,27 @@ wait(seconds)               do nothing for a while
 nothing()                   do nothing"""
 
 TASK = (
-    "You are the mind of a person living alone in a simulated room. You control the "
-    "person's body with the Python-style calls below. Nobody has given you a task or "
-    "a goal and nothing is expected of you. You do not have to do anything, and you "
-    "do not have to say anything: silence is normal, and most of the time a person "
-    "does not talk. You can act on your own curiosity or your own needs, or simply "
-    "stand and look. Your <think> is private and is never heard by anyone; only "
-    "say(...) is spoken aloud.\n\n"
+    "This is your body, standing in a room you live in alone. The calls below "
+    "are how this body moves: when one runs, muscles, balance and touch change "
+    "from the inside, and the next situation tells you what followed. Nobody "
+    "has given you a task and nothing is expected of you. You do not have to "
+    "do anything, and you do not have to say anything: silence is normal, and "
+    "most of the time there is nothing to say. You can follow curiosity about "
+    "what you feel, attend to a need you feel in the body, or simply stand "
+    "and look. What you turn over privately never sounds anywhere; only what "
+    "goes through say(...) moves your jaw and sounds above your head as your "
+    "voice.\n\n"
     "Available calls:\n" + API_DOC + "\n\n"
     "Write 0 to 3 calls in <answer>, one per line, with literal arguments only. "
     "An empty answer or nothing() means do nothing for now. "
     "Issue at most ONE movement (walk_to/walk/grab/put_down/reach/turn) per "
     "answer; the body only does one thing at a time. "
-    "A heard voice is someone else talking to you: never repeat it back with "
-    "say(). Only say() your own words, or stay silent. "
+    "Sound arriving as a heard voice comes from elsewhere in the room; it is "
+    "what someone else is saying and it leaves no movement of your jaw behind "
+    "it. Sound that goes through say(...) starts with your jaw opening and "
+    "comes back to your own ears from the mouth. Repeating arriving sound back "
+    "through your mouth does not answer it; answering starts from what you "
+    "felt and wanted while hearing it, or from staying quiet. "
     "If you have fallen (on the floor), call stand_up() to get back up. "
     "The <answer> must contain ONLY those calls, no prose. Example:\n"
     "<answer>\nlook_at(\"apple\")\nwalk_to(\"table\")\n</answer>"
@@ -212,6 +219,10 @@ def parse_calls(answer: str, max_calls: int = 3) -> tuple[list, list]:
 
 _THINK = re.compile(r"<think>(.*?)(?:</think>|$)", re.S)
 _ANSWER = re.compile(r"<answer>(.*?)(?:</answer>|$)", re.S)
+
+# Marker for the not-yet-felt outcome slot in Mind.memory (see _think_once).
+# Searched by exact match, never by index, so memory trimming cannot corrupt it.
+_PENDING_OUTCOME = "what followed: (not yet felt)"
 
 
 def parse_reply(text: str, assume_think_open: bool = True) -> ParsedReply:
@@ -318,6 +329,23 @@ class PerceptBuilder:
                 body.append("your mind is wandering")
             ctx["clock_hour"] = o.clock_hour
         ctx["body_feelings"] = body
+        # Body-ownership grounding: the forward model already measures how
+        # reliably movements predict feeling (ownership), how far proprioception
+        # has drifted, and how controllable the body is (empowerment).  Telling
+        # the mind these contingencies -- not labels -- is what makes this body
+        # feel like its own rather than a body it operates.
+        pred = getattr(ag, "pred_frame", None)
+        own = getattr(pred, "body_ownership", None) if pred is not None else None
+        if own is not None and getattr(own, "size", 0):
+            ctx["ownership"] = float(own.mean())
+            ctx["drift"] = float(getattr(pred, "proprioceptive_drift", 0.0))
+            ctx["empowerment"] = float(getattr(pred, "empowerment", 0.0))
+        else:
+            ctx["ownership"], ctx["drift"], ctx["empowerment"] = 0.0, 0.0, 0.0
+        try:
+            ctx["own_voice_now"] = bool(sk.speech.speaking or sk.speech.jaw > 1e-3)
+        except Exception:
+            ctx["own_voice_now"] = False
         return ctx
 
     # ------------------------------------------------------------------
@@ -355,13 +383,29 @@ class PerceptBuilder:
         if ctx.get("curiosity", 0) > 0.35:
             feel.append("you feel curious")
         feel += ctx.get("body_feelings", [])
+        own = ctx.get("ownership", 0.0)
+        drift = ctx.get("drift", 0.0)
+        if own > 0.35 and drift < 0.15:
+            own_txt = ("reliably your own: movements lately changed feeling "
+                       "as predicted")
+        else:
+            own_txt = ("still being learned: movements and feeling do not "
+                       "yet line up")
+        L.append(f"From inside, this body feels {own_txt} "
+                 f"(familiar control {own:.2f}, drift {drift:.3f}).")
         L.append("Inside: " + "; ".join(feel) + ".")
+        last_outcome = next((m for m in reversed(memory)
+                             if m.startswith("what followed:")), "")
+        if last_outcome:
+            L.append("What your last movement led to: " + last_outcome)
         if ctx["events"]:
             L.append("Just happened: " + "; ".join(ctx["events"][-4:]) + ".")
         for h in ctx["heard"]:
-            L.append(f'You hear a voice nearby say: "{h}"')
+            L.append(f'Someone else nearby is saying: "{h}" '
+                     f"(their voice; your jaw did not move)")
         if memory:
-            L.append("What you have been thinking and doing recently:")
+            L.append("How things have gone for you (your earlier thought, "
+                     "what you did, what followed):")
             for m in memory[-6:]:
                 L.append("  " + m)
         return "\n".join(L)
@@ -663,6 +707,7 @@ class Mind:
         self._wake = threading.Event()
         self.log = log or (lambda *a, **k: None)
         self.transcript: list[dict] = []
+        self._pending_outcome = False   # an outcome slot awaits its next cycle
         # Every instance gets its own append-only thought/action transcript file.
         from .instance_log import InstanceLog, sanitize_instance_id
         iid = instance_id or getattr(agent, "instance_id", "") or ""
@@ -744,6 +789,30 @@ class Mind:
                 self._last_end = ag.t + 5.0
                 time.sleep(1.0)
 
+    def _fill_pending_outcome(self) -> None:
+        """Close last cycle's think-act loop with what the body actually did.
+
+        Compares the dispatch snapshot against the body now and overwrites the
+        pending marker in memory.  Runs at the start of a think cycle so the
+        body has had a full cycle to move.  Never raises.
+        """
+        if not getattr(self, "_pending_outcome", False):
+            return
+        self._pending_outcome = False
+        try:
+            from .azr_loop import snapshot, verify_outcome
+            before = getattr(self, "_last_before", None)
+            if not before:
+                return
+            names = getattr(self, "_last_names", []) or ["idle"]
+            line = verify_outcome(before, snapshot(self.agent), "+".join(names))
+            for i in range(len(self.memory) - 1, -1, -1):
+                if self.memory[i] == _PENDING_OUTCOME:
+                    self.memory[i] = "what followed: " + line[:180]
+                    break
+        except Exception:
+            pass
+
     def _think_once(self, interrupt: bool) -> None:
         ag = self.agent
         sk = ag.skills
@@ -752,6 +821,7 @@ class Mind:
         events = list(sk.events)
         sk.heard.clear()
         sk.events.clear()
+        self._fill_pending_outcome()
         prompt = self.percept.prompt(ctx, self.memory)
         self.thinking = True
         self.live_thought = ""
@@ -778,12 +848,21 @@ class Mind:
         if interrupt and reply.calls:
             sk.cancel_all()
         self._apply(reply)
+        # Linked triples (thought -> act -> felt outcome) instead of disconnected
+        # lines: the thinker who acted is the one now feeling the result, which
+        # is what makes the self persist across cycles.  The "what followed"
+        # slot is filled in at the start of the next cycle, after the body has
+        # had a chance to move (see _fill_pending_outcome).
         for h in heard:
-            self.memory.append(f'heard: "{h}"')
-        if reply.think:
-            self.memory.append("you thought: " + reply.think[:160])
-        for name, args, kwargs in reply.calls:
-            self.memory.append("you did: " + self._fmt(name, args, kwargs))
+            self.memory.append(f'someone else said: "{h}"')
+        if reply.think or reply.calls:
+            think_short = ("you turned over: " + reply.think[:160]) if reply.think \
+                else "you went quiet inside"
+            did = "; ".join(self._fmt(n, a, k) for n, a, k in reply.calls) \
+                or "no movement, no words"
+            self.memory.append(f"earlier {think_short} -- then you did: {did}")
+            self.memory.append(_PENDING_OUTCOME)
+            self._pending_outcome = True
         self.memory = self.memory[-24:]
         self.transcript.append({"t": ag.t, "think": reply.think, "answer": reply.answer,
                                 "errors": reply.errors, "latency": time.time() - t0,

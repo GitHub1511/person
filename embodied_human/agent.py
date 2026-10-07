@@ -817,7 +817,18 @@ class EmbodiedHuman:
             memory_valence=float(self.inner.out.memory_valence) if self.inner is not None else 0.0,
             familiarity=float(self.inner.out.familiarity) if self.inner is not None else 0.0,
             control=float(fclip(0.9 - 0.6 * self.motor.balance_error
-                                  - (0.4 if st and st.fallen else 0.0), 0, 1)),
+                                  - (0.4 if st and st.fallen else 0.0)
+                                  # verified agency feeds the sense of control:
+                                  # familiar (owned, low-drift) and controllable
+                                  # (empowered) movement raises it; only after
+                                  # movement, never for speaking (which stays
+                                  # reward-free by design)
+                                  + 0.25 * ((float(pred.body_ownership.mean())
+                                             if pred is not None and
+                                             getattr(pred.body_ownership, "size", 0)
+                                             else 0.35) - 0.35)
+                                  + 0.10 * float(fclip(pred.empowerment if pred else 0.0,
+                                                       0, 1)), 0, 1)),
             safety=float(fclip(1.0 - self.motor.balance_error * 1.2, 0, 1)),
             effort=float(st.torque_effort) if st else 0.0,
             balance_error=float(fclip(self.motor.balance_error, 0, 1.5)),

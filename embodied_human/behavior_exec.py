@@ -550,7 +550,13 @@ class BehaviorExecutor:
                     ag.data.qpos[a_p] = float(self.eye_target[1])
         jaw, voice = self._vocal(b, t, dt)
         self.voice = voice
-        ag.receptors.self_voice = max(float(sk.speech.jaw) * 0.0, voice)
+        # Own-voice reafference: the jaw moving and the voice sounding mark a
+        # sound as self-caused, so heard (elsewhere, jaw still) and said (jaw
+        # moving, mouth-local return) are auditorily separable downstream.
+        # hear() never touches this path, so other voices stay other.
+        ag.receptors.self_voice = max(float(sk.speech.jaw) * 1.2
+                                      + (0.6 if sk.speech.speaking else 0.0),
+                                      voice)
         self.jaw_active = (jaw > 1e-3) and not sk.speech.speaking
         if self.jaw_active and sk.jaw_adr is not None:
             ag.data.qpos[sk.jaw_adr] = float(np.clip(jaw, 0.0, 0.42))
