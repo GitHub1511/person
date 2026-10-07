@@ -65,6 +65,7 @@ import numpy as np
 from ._fast import fclip
 
 from . import skin
+from .complexity import C as COMPLEXITY
 from .config import SimConfig
 from .state import BodyState
 
@@ -77,6 +78,27 @@ TACTILE_CHANNELS = (
     "noci_mech", "noci_heat", "noci_cold", "itch", "warm", "cold",
     "temperature", "slip", "friction_util",
 )
+# Extended somatosensory bank: receptor classes and tissue states the 26-channel
+# bank did not have.  Appended, so the original indices are unchanged.
+EXTENDED_TACTILE_CHANNELS = (
+    "hair_deflection",      # lanceolate endings: air movement, light touch
+    "stretch_u", "stretch_v", "stretch_energy",   # Ruffini-like skin stretch
+    "edge_gradient",        # Merkel edge response (contrast with the patch)
+    "tickle",               # knismesis: light moving touch on hairy skin
+    "wetness",              # skin moisture (sweat, contact)
+    "blood_flow_local",     # dermal perfusion of this patch
+    "piloerection",         # arrector pili state
+    "sensitisation",        # peripheral sensitisation (hyperalgesia)
+    "local_inflammation",
+    "pruritogen",
+    "receptor_fatigue",
+    "noci_a_delta",         # fast pricking pain
+    "noci_c_poly",          # slow polymodal (burning/aching) pain
+    "irritant",             # TRPA1: chemical / drying irritation
+    "ischemia",             # pressure-induced local ischaemia (the urge to shift)
+)
+if COMPLEXITY.extended_tactile:
+    TACTILE_CHANNELS = TACTILE_CHANNELS + EXTENDED_TACTILE_CHANNELS
 N_TACTILE_CH = len(TACTILE_CHANNELS)
 CH = {n: i for i, n in enumerate(TACTILE_CHANNELS)}
 
@@ -219,6 +241,44 @@ class TactileSystem:
         self.histamine = np.zeros(self.n_taxels)
         self._brush_velocity = np.zeros(self.n_taxels)
         self._prev_pos = self.local_pos.copy()
+
+        # ---- extended bank: tissue states and the organ-level inputs they
+        # ---- take from the internal world (see inner_world.py) --------------
+        self.extended = bool(COMPLEXITY.extended_tactile)
+        self.patch_idx = skin.TAXEL_PATCH_IDX
+        self.n_patches = skin.N_PATCHES
+        self._patch_count = np.maximum(np.bincount(self.patch_idx,
+                                                   minlength=self.n_patches), 1)
+        n = self.n_taxels
+        self.stretch_u = np.zeros(n)
+        self.stretch_v = np.zeros(n)
+        self.wet = np.zeros(n)
+        self.pilo = np.zeros(n)
+        self.sens = np.zeros(n)            # peripheral sensitisation
+        self.rfatigue = np.zeros(n)
+        self.ischemia = np.zeros(n)
+        self.pruri = np.zeros(n)
+        # organ-level inputs, one value per skin patch; the internal world
+        # overwrites these, the defaults describe a healthy resting body
+        self.inner = {
+            "blood_flow": np.ones(self.n_patches),
+            "inflammation": np.zeros(self.n_patches),
+            "sweat": np.zeros(self.n_patches),
+            "irritant": np.zeros(self.n_patches),
+            "damage": np.zeros(self.n_patches),
+            "pruritogen": np.zeros(self.n_patches),
+            "humidity": 0.45,
+            "airflow": 0.0,
+        }
+
+    def set_inner(self, **arrays) -> None:
+        """Let the internal world drive patch-level tissue state."""
+        for k, v in arrays.items():
+            self.inner[k] = v
+
+    def _patch_mean(self, x: np.ndarray) -> np.ndarray:
+        return (np.bincount(self.patch_idx, weights=x, minlength=self.n_patches)
+                / self._patch_count)
 
     # ------------------------------------------------------------------
     def sense(self, model, data, meta, state: BodyState,
