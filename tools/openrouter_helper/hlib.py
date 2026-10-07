@@ -190,6 +190,37 @@ def project_map() -> str:
     return "\n".join(rows)
 
 
+def api_outline(per_module: int = 70, total: int = 24000) -> str:
+    """The real classes, methods and functions (signatures only), so a planner that cannot read the
+    code still names things that exist."""
+    import ast
+    out = []
+    for f in sorted((ROOT / "embodied_human").glob("*.py")):
+        try:
+            tree = ast.parse(f.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError:
+            out.append(f"{f.name}: (does not parse)"); continue
+        lines = []
+
+        def sig(fn):
+            a = [x.arg for x in fn.args.args if x.arg != "self"]
+            return f"{fn.name}({', '.join(a[:7])}{"..." if len(a) > 7 else ""})"
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                meths = [sig(n) for n in node.body if isinstance(n, ast.FunctionDef) and not n.name.startswith("_")]
+                attrs = [t.id for n in node.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)][:6]
+                lines.append(f"  class {node.name}: " + ", ".join(meths[:14]) + (f"  [attrs {", ".join(attrs)}]" if attrs else ""))
+            elif isinstance(node, ast.FunctionDef) and not node.name.startswith("_"):
+                lines.append(f"  def {sig(node)}")
+            elif isinstance(node, ast.Assign):
+                for t in node.targets:
+                    if isinstance(t, ast.Name) and t.id.isupper():
+                        lines.append(f"  {t.id} = ...")
+        out.append(f"{f.name}:\n" + "\n".join(lines[:per_module]))
+    s = "\n".join(out)
+    return s[:total] + ("\n... (outline truncated)" if len(s) > total else "")
+
+
 def history_text(n: int = 10) -> str:
     f = STATE / "history.jsonl"
     if not f.exists():
@@ -207,6 +238,7 @@ def context() -> str:
     parts.append((HERE / "prompts" / "rules.md").read_text())
     parts.append("## Machine right now\n" + resources_text(res))
     parts.append("## Modules (embodied_human/)\n" + project_map())
+    parts.append("## Real API outline (names that exist; do not invent others)\n```\n" + api_outline() + "\n```")
     cm = STATE / "complexity_measure.json"
     cur = ROOT / "embodied_human" / "complexity.json"
     lvl = json.loads(cur.read_text()).get("name") if cur.exists() else "extreme (built-in default)"
@@ -295,6 +327,9 @@ def plan_parse(path: str) -> int:
     files = [f.strip().strip("`") for f in re.split(r"[,\n]", sec.get("FILES_TO_READ", "")) if f.strip()][:10]
     files = [f for f in files if (ROOT / f).exists() and ".." not in f and not f.startswith(("/", "\\"))]
     info = json.loads((STATE / "current_model.json").read_text()) if (STATE / "current_model.json").exists() else {}
+    xh = resp.get("x_helper") or {}
+    if xh.get("model"):                          # the model that actually answered
+        info["model"], info["target_tokens"] = xh["model"], xh.get("target_tokens", info.get("target_tokens", 30000))
     header = (HERE / "prompts" / "coder_header.md").read_text().replace(
         "{{TARGET_TOKENS}}", f"{info.get('target_tokens', 30000):,}")
     body = [header, f"## {sec['TITLE']}\n", f"**Why:** {sec.get('RATIONALE', '')}\n"]
